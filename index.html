@@ -40,7 +40,7 @@
 <p class="muted" style="font-size:12px">Ukuran dan rotasi hanya mengubah tampilan objek, bukan kapasitas atau jalur tamu.</p>
 </div><div id="tableprops"><label>Kapasitas</label><input id="p-capacity" type="number" min="0" onchange="edit('capacity',Number(this.value))"><label>Section</label><select id="p-section" onchange="edit('section',this.value)"><option>A</option><option>B</option><option>C</option><option>D</option><option>E</option><option>F</option></select><label>Bentuk</label><select id="p-shape" onchange="edit('shape',this.value)"><option value="rect">Kotak</option><option value="long">Persegi panjang</option><option value="round">Bulat</option></select></div><button style="margin-top:14px" onclick="removeSelected()">Hapus objek</button></div><hr><div id="stats" class="muted"></div><label>Cari meja</label><input id="locate" placeholder="55A" oninput="selectByNumber(this.value)"><p class="muted" style="font-size:12px">Entrance demo di kanan bawah. Rute yang ditampilkan hanya melalui koridor yang sudah ditentukan dan tidak bertabrakan dengan meja.</p></aside></div>
 <div id="guests" class="panel hidden"><h2>Guest Assignment</h2><p class="muted">Nama tamu dari dua file Excel sudah disiapkan. Nomor meja boleh kosong. Simpan backup secara rutin; data browser tidak otomatis tersinkron.</p><div class="two"><div><label>Nama tamu</label><input id="newname" placeholder="Nama undangan"></div><div><label>Nomor meja (opsional)</label><input id="newtable" placeholder="55A"></div><div><label>Jumlah pax (opsional)</label><input id="newpax" type="number" min="1" value="2"></div></div><div class="toolbar" style="margin-top:13px"><button class="primary" onclick="addGuest()">Tambah Tamu</button><button onclick="document.getElementById('csvfile').click()">Import CSV</button><input hidden id="csvfile" type="file" accept=".csv,text/csv" onchange="importCSV(event)"><button onclick="downloadCSV()">Export CSV</button></div><div id="guestrows"></div></div>
-<div id="staff" class="panel hidden"><h2>Staff Registration • Supabase</h2><div class="metrics"><div class="metric"><small>Undangan check-in</small><strong id="checked">0</strong></div><div class="metric"><small>Pax hadir aktual</small><strong id="arrived">0</strong></div></div><label>Cari nama atau nomor meja</label><input id="staffquery" placeholder="Ketik nama / meja" oninput="renderStaff()"><div id="staffrows"></div><div class="notice">Data check-in staf tersimpan di Supabase setelah login.</div></div>
+<div id="staff" class="panel hidden"><h2>Staff Registration • Supabase</h2><div id="ktStaffEventBanner" class="notice" role="status" style="border:1px solid #d9c7b2"><strong>Wedding aktif: belum diverifikasi</strong><div>Menunggu konfirmasi penugasan dari Supabase.</div></div><div class="metrics"><div class="metric"><small>Undangan check-in</small><strong id="checked">0</strong></div><div class="metric"><small>Pax hadir aktual</small><strong id="arrived">0</strong></div></div><label>Cari nama atau nomor meja</label><input id="staffquery" placeholder="Ketik nama / meja" oninput="renderStaff()"><div id="staffrows"></div><div class="notice">Data check-in staf tersimpan di Supabase setelah login.</div></div>
 <div id="guest" class="panel hidden guest-shell"><div class="guest-top"><div class="guest-brand">KREATIVTHINGS <span>SMART SEATING</span></div><div class="guest-ornament">✦</div><h2 id="eventWelcomeTitle">Welcome to Our Engagement</h2><div id="eventCoupleNames" class="event-couple-names"></div><p>Find your seat with ease</p></div><div class="guest-inner"><div class="guest-search-card"><label for="guestquery">CARI NAMA UNDANGAN</label><div class="guest-search-row"><input id="guestquery" type="search" autocomplete="off" placeholder="Nama depan atau belakang..." oninput="renderGuest()" onkeydown="if(event.key==='Enter')searchPublicGuest()"><button type="button" onclick="document.getElementById('guestquery').value='';renderGuest();document.getElementById('guestquery').focus()" aria-label="Hapus pencarian">✕</button></div><p class="guest-hint">Cukup ketik nama depan atau nama belakang (minimal 3 huruf), lalu tekan Cari Nama.</p><button type="button" class="guest-route-button" onclick="searchPublicGuest()">Cari Nama</button></div><div id="guestresult" aria-live="polite"></div><div id="guestmapbox" class="hidden"><div class="guest-map-title">Petunjuk arah dari Entrance</div><p style="font-size:12px;text-align:center;color:#806044">← Geser denah ke kiri atau kanan →</p><div class="guest-map-scroll"><svg id="viewmap" viewBox="0 0 1000 750"></svg></div><button class="guest-back" onclick="document.getElementById('guestmapbox').classList.add('hidden');document.getElementById('guestquery').focus()">← Kembali ke hasil pencarian</button></div><p class="guest-footer">Need assistance? Please ask our Kreativthings crew.</p></div></div></div>
 <script>
 // === PENGATURAN ACARA KREATIVTHINGS ===
@@ -63,7 +63,7 @@ async function loadPublishedEventSettings(){
  if(!ktPublicEventId())return;
  const status=document.getElementById('eventSettingsStatus');
  try{
-  const r=await fetch(SB_URL+'/rest/v1/kt_event_settings?id=eq.1&select=event_type,couple_names',{headers:{apikey:SB_KEY,Authorization:'Bearer '+SB_KEY},cache:'no-store'});
+  const r=await fetch(SB_URL+'/rest/v1/kt_event_settings?event_id=eq.'+encodeURIComponent(ktPublicEventId())+'&select=event_type,couple_names',{headers:{apikey:SB_KEY,Authorization:'Bearer '+SB_KEY},cache:'no-store'});
   if(!r.ok)throw Error('Supabase HTTP '+r.status);
   const rows=await r.json();
   if(!rows.length)throw Error('Pengaturan acara belum tersedia');
@@ -424,10 +424,10 @@ async function staffSignIn(){
   if(!ktAdminRole)await loadStaffGuests();document.getElementById('staff').classList.remove('hidden');
   document.getElementById('guest').classList.remove('hidden');previewNotice.classList.add('hidden');renderGuest();
   await loadPublishedEventSettings();document.getElementById('eventSettingsButton').classList.remove('hidden');staffStatus('Login berhasil. '+staffGuests.length+' undangan terbaca dari Supabase.');document.getElementById('staff').scrollIntoView({behavior:'smooth'});
- }catch(e){staffToken=null;staffStatus('Gagal: '+e.message)}
+ }catch(e){staffToken=null;ktStaffEventReady=false;ktSelectedEventId='';staffGuests=[];renderLiveStaff();ktStaffEventMessage('Wedding belum terverifikasi','Gagal membaca penugasan: '+e.message);staffStatus('Gagal: '+e.message)}
 }
 
-function staffSignOut(){ktStaffReturnButton.hidden=true;ktClearSession();document.getElementById('eventSettings').classList.add('hidden');document.getElementById('eventSettingsButton').classList.add('hidden');staffToken=null;staffGuests=[];document.getElementById('staff').classList.add('hidden');document.getElementById('guest').classList.remove('hidden');document.getElementById('staffLogin').classList.add('hidden');previewNotice.classList.add('hidden');document.getElementById('guestquery').value='';renderGuest();staffStatus('');}
+function staffSignOut(){ktStaffEventReady=false;ktSelectedEventId='';ktStaffEventMessage('Wedding aktif: belum login','Silakan login untuk melihat penugasan.');ktStaffReturnButton.hidden=true;ktClearSession();document.getElementById('eventSettings').classList.add('hidden');document.getElementById('eventSettingsButton').classList.add('hidden');staffToken=null;staffGuests=[];document.getElementById('staff').classList.add('hidden');document.getElementById('guest').classList.remove('hidden');document.getElementById('staffLogin').classList.add('hidden');previewNotice.classList.add('hidden');document.getElementById('guestquery').value='';renderGuest();staffStatus('');}
 async function sbStaff(path,opts={}){
  if(!staffToken)throw Error('Silakan login kembali.');
  if(path.startsWith('wedding_guests')){
@@ -441,6 +441,7 @@ async function sbStaff(path,opts={}){
  return r.status===204?null:r.json();
 }
 async function loadStaffGuests(){
+ if(!ktAdminRole&&!ktStaffEventReady)throw Error('Wedding Staff belum terverifikasi.');
  ktRequireEvent();
  staffGuests=await sbStaff('wedding_guests?select=id,guest_name,category,pax,table_number,section,checked_in,arrived_pax,arrived_children&order=guest_name.asc&limit=1000');
  renderLiveStaff();
@@ -1008,7 +1009,7 @@ staffSignIn=async function(){
  try{
   ktAdminRole=await ktGetAdminRole(staffToken);
   ktAdminVisibility();
-  if(ktAdminRole){adminRenderSummary();document.getElementById('adminDashboardStatus').textContent='Akun Admin terverifikasi.';staffStatus('Login Admin berhasil. Dashboard tersedia di bawah.');}
+  if(ktAdminRole){ktStaffEventMessage('Mode Admin','Pilih wedding melalui Dashboard Admin.');adminRenderSummary();document.getElementById('adminDashboardStatus').textContent='Akun Admin terverifikasi.';staffStatus('Login Admin berhasil. Dashboard tersedia di bawah.');}
   else staffStatus('Login Crew berhasil. Akses Admin tidak tersedia.');
  }catch(e){ktAdminRole=false;ktAdminVisibility();staffStatus('Login berhasil, tetapi verifikasi Admin gagal: '+e.message);}
 };
@@ -1024,6 +1025,26 @@ saveEventSettings=async function(){if(!ktAdminRole){alert('Hanya Admin yang bole
 // Multi-event safety: admin chooses a wedding, staff follows their assignment.
 const KT_LEGACY_EVENT_ID='14abdae9-3352-4727-ac3a-c9db54cf45cc';
 let ktEventRegistry=[],ktSelectedEventId='',ktStaffEventReady=false;
+function ktStaffEventMessage(state,detail=''){
+ const el=document.getElementById('ktStaffEventBanner');if(!el)return;
+ el.replaceChildren();const title=document.createElement('strong'),body=document.createElement('div');
+ title.textContent=state;body.textContent=detail;el.append(title,body);
+}
+async function ktShowStaffAssignedEvent(){
+ ktStaffEventMessage('Memeriksa wedding aktif…','Mencocokkan penugasan Staff dengan daftar wedding.');
+ if(!staffToken||!ktStaffEventReady||!ktIsUUID(ktSelectedEventId)){
+  ktStaffEventMessage('Wedding belum terverifikasi','Penugasan belum berhasil dibaca. Jangan lakukan check-in.');return false;
+ }
+ try{
+  const rows=await sbStaff('kt_events?select=id,event_name,event_date,event_type&id=eq.'+encodeURIComponent(ktSelectedEventId));
+  if(!Array.isArray(rows)||rows.length!==1)throw Error('Nama wedding tidak dapat dibaca dari database.');
+  const e=rows[0];const name=e.event_name||'Wedding tanpa nama';
+  ktStaffEventMessage('Wedding aktif: '+name,[e.event_date,e.event_type].filter(Boolean).join(' • '));return true;
+ }catch(err){
+  ktStaffEventMessage('Wedding belum terverifikasi','ID penugasan terbaca, tetapi detail wedding gagal dimuat: '+err.message+'. Jangan lakukan check-in.');return false;
+ }
+}
+
 const ktIsUUID=v=>/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v||'');
 function ktPublicEventId(){const fromUrl=new URLSearchParams(location.search).get('event');return ktIsUUID(fromUrl)?fromUrl:(staffToken?ktSelectedEventId:'');}
 function ktRequireEvent(){if(!ktIsUUID(ktSelectedEventId))throw Error('Pilih wedding aktif dahulu agar data tidak tercampur.');return ktSelectedEventId;}
@@ -1053,7 +1074,7 @@ async function ktResolveStaffEvent(){
  const user=await r.json();if(!ktIsUUID(user.id))throw Error('User ID tidak valid.');
  const rows=await sbStaff('kt_staff_active_event?select=event_id&staff_user_id=eq.'+encodeURIComponent(user.id));
  if(!rows.length||!ktIsUUID(rows[0].event_id))throw Error('Belum ada wedding ditugaskan. Hubungi Admin.');
- ktSelectedEventId=rows[0].event_id;ktStaffEventReady=true;
+ ktSelectedEventId=rows[0].event_id;ktStaffEventReady=true;await ktShowStaffAssignedEvent();
 }
 </script>
 <script>
