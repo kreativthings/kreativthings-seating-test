@@ -1112,9 +1112,10 @@ function ktUpdateLayoutEventBanner(){
  banner.append(title,detail);
 }
 async function ktSelectAdminEvent(id){
- if(!ktAdminRole||!ktEventRegistry.some(e=>e.id===id)){ktSelectedEventId='';objects=[];selected=-1;history=[];document.getElementById('ktLegacyPresetButton').style.display='none';ktUpdateLayoutEventBanner();refreshMaps();return;}
+ if(!ktAdminRole||!ktEventRegistry.some(e=>e.id===id)){ktSelectedEventId='';ktStaffEventMessage('Wedding aktif: belum dipilih','Pilih wedding melalui Dashboard Admin.');objects=[];selected=-1;history=[];document.getElementById('ktLegacyPresetButton').style.display='none';ktUpdateLayoutEventBanner();refreshMaps();return;}
  document.getElementById('eventSettings').classList.add('hidden');
  ktSelectedEventId=id;
+ ktStaffEventMessage('Memuat wedding aktif…','Memverifikasi data wedding yang dipilih Admin.');
  publishedEventSettings={eventType:'Wedding',coupleNames:''};updateEventHeading();
  ktUpdateLayoutEventBanner();document.getElementById('ktLegacyPresetButton').style.display=id===KT_LEGACY_EVENT_ID?'':'none';document.getElementById('route-table').value='1';const status=document.getElementById('ktActiveEventStatus');status.textContent='Memuat wedding terpilih…';
  staffGuests=[];objects=[];published=[];selected=-1;history=[];renderLiveStaff();
@@ -1134,8 +1135,10 @@ async function ktSelectAdminEvent(id){
    document.getElementById('settingEventType').value=eventType;
    document.getElementById('settingCoupleNames').value=settings.coupleNames||coupleNames;
   }
+  if(ktSelectedEventId!==id)return;
+  ktStaffEventMessage('Wedding aktif: '+(activeEvent?.event_name||activeEvent?.couple_name||'Wedding'),[activeEvent?.event_date,activeEvent?.event_type,'Mode Admin'].filter(Boolean).join(' • '));
   adminRenderSummary();adminRenderGuests();status.textContent='Wedding aktif: '+ktEventRegistry.find(e=>e.id===id).event_name+'. '+staffGuests.length+' undangan. Data wedding lain tidak ditampilkan.';
- }catch(e){status.textContent='Gagal memuat wedding: '+e.message;}
+ }catch(e){if(ktSelectedEventId===id){ktStaffEventMessage('Wedding belum siap','Gagal memuat data event: '+e.message+'. Jangan lakukan check-in.');status.textContent='Gagal memuat wedding: '+e.message;}}
 }
 function ktCopyGuestLink(){
  const id=ktRequireEvent(),url=new URL(location.href);url.searchParams.set('event',id);
