@@ -396,29 +396,42 @@ async function saveEventSettings(){
  if(!confirm('Publish '+eventType+' — '+coupleNames+' untuk wedding yang dipilih?'))return;
  status.textContent='Memverifikasi sesi Admin dan menyimpan…';
  try{
-  // Refresh access token so its app_metadata role is current in the RLS JWT.
+  // A successful /auth/v1/user lookup is not proof that the access JWT contains
+  // the claim evaluated by PostgREST RLS. Check the actual token before writing.
   await ktRefreshSession(false);
   if(!staffToken||!(await ktGetAdminRole(staffToken)))throw Error('Sesi Admin tidak valid. Logout dan login kembali.');
+  let claims;
+  try{
+   const payload=staffToken.split('.')[1];
+   const base64=payload.replace(/-/g,'+').replace(/_/g,'/');
+   claims=JSON.parse(atob(base64.padEnd(Math.ceil(base64.length/4)*4,'=')));
+  }catch(_){throw Error('Token login tidak dapat diperiksa. Logout lalu login kembali.');}
+  if(claims.app_metadata?.smart_seating_role!=='admin')throw Error('Token login belum memuat role Admin untuk RLS. Logout lalu login kembali.');
   if(ktRequireEvent()!==eventId)throw Error('Wedding aktif berubah. Ulangi publish.');
-  const headers={apikey:SB_KEY,Authorization:'Bearer '+staffToken,'Content-Type':'application/json',Prefer:'return=representation'};
   const endpoint=SB_URL+'/rest/v1/kt_event_settings';
-  const r=await fetch(endpoint+'?event_id=eq.'+encodeURIComponent(eventId),{
-   method:'PATCH',headers,body:JSON.stringify({event_type:eventType,couple_names:coupleNames})
+  const headers={apikey:SB_KEY,Authorization:'Bearer '+staffToken,'Content-Type':'application/json'};
+  // Read first: PATCH returning [] does not necessarily mean the row is absent
+  // (a SELECT RLS policy may hide it). Never INSERT solely on that basis.
+  const check=await fetch(endpoint+'?event_id=eq.'+encodeURIComponent(eventId)+'&select=id',{headers,cache:'no-store'});
+  if(!check.ok)throw Error('Gagal memeriksa pengaturan event (HTTP '+check.status+'): '+(await check.text()).slice(0,200));
+  const existing=await check.json();
+  if(existing.length>1)throw Error('Ada pengaturan ganda untuk wedding ini. Hubungi admin sebelum publish.');
+  const writing=await fetch(endpoint+(existing.length?'?id=eq.'+encodeURIComponent(existing[0].id):''),{
+   method:existing.length?'PATCH':'POST',
+   headers:{...headers,Prefer:'return=minimal'},
+   body:JSON.stringify(existing.length?{event_type:eventType,couple_names:coupleNames}:{event_id:eventId,event_type:eventType,couple_names:coupleNames})
   });
-  if(!r.ok)throw Error('UPDATE ditolak (HTTP '+r.status+'): '+(await r.text()).slice(0,240));
-  const rows=await r.json();
-  if(!rows.length){
-   const insert=await fetch(endpoint,{
-    method:'POST',headers,body:JSON.stringify({event_id:eventId,event_type:eventType,couple_names:coupleNames})
-   });
-   if(!insert.ok){
-    const body=await insert.text();
-    if(insert.status===403||body.includes('42501'))throw Error('INSERT ditolak oleh kebijakan RLS kt_event_settings (42501). Role Admin sudah diverifikasi; policy INSERT di Supabase perlu diperiksa. Tidak ada data event lain yang diubah.');
-    throw Error('INSERT gagal (HTTP '+insert.status+'): '+body.slice(0,240));
-   }
-   const inserted=await insert.json();
-   if(!inserted.length)throw Error('Penyimpanan belum terkonfirmasi.');
+  if(!writing.ok){
+   const body=await writing.text();
+   if(body.includes('42501'))throw Error('Supabase menolak '+(existing.length?'UPDATE':'INSERT')+' (RLS 42501), meskipun JWT sudah berisi role Admin. Periksa policy dan izin tabel kt_event_settings. '+body.slice(0,160));
+   throw Error('Supabase HTTP '+writing.status+': '+body.slice(0,250));
   }
+  if(ktRequireEvent()!==eventId)throw Error('Wedding aktif berubah. Muat ulang untuk memastikan hasil.');
+  // Verify that the intended event row is visible and contains the saved data.
+  const verify=await fetch(endpoint+'?event_id=eq.'+encodeURIComponent(eventId)+'&select=event_type,couple_names',{headers,cache:'no-store'});
+  if(!verify.ok)throw Error('Tersimpan, tetapi verifikasi gagal (HTTP '+verify.status+'). Refresh sebelum mengulangi.');
+  const verified=await verify.json();
+  if(!verified.some(x=>x.event_type===eventType&&x.couple_names===coupleNames))throw Error('Belum bisa memverifikasi data setelah penyimpanan. Jangan klik publish berulang; periksa kebijakan SELECT.');
   publishedEventSettings={eventType,coupleNames};updateEventHeading();
   status.textContent='Berhasil dipublish untuk wedding ini. Tamu yang membuka QR event ini akan melihat judul baru setelah refresh.';
  }catch(e){status.textContent='Publish gagal: '+e.message;}
