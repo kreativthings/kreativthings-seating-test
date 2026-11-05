@@ -66,7 +66,17 @@ async function loadPublishedEventSettings(){
   const r=await fetch(SB_URL+'/rest/v1/kt_event_settings?event_id=eq.'+encodeURIComponent(ktPublicEventId())+'&select=event_type,couple_names',{headers:{apikey:SB_KEY,Authorization:'Bearer '+SB_KEY},cache:'no-store'});
   if(!r.ok)throw Error('Supabase HTTP '+r.status);
   const rows=await r.json();
-  if(!rows.length)throw Error('Pengaturan acara belum tersedia');
+  if(!rows.length){
+    // Wedding baru: gunakan metadata event bila dapat dibaca secara publik.
+    const eventResponse=await fetch(SB_URL+'/rest/v1/kt_events?id=eq.'+encodeURIComponent(ktPublicEventId())+'&select=event_type,couple_name,event_name',{headers:{apikey:SB_KEY,Authorization:'Bearer '+SB_KEY},cache:'no-store'});
+    if(!eventResponse.ok)throw Error('Pengaturan acara belum dipublikasikan');
+    const eventRows=await eventResponse.json();
+    if(!eventRows.length)throw Error('Pengaturan acara belum dipublikasikan');
+    const e=eventRows[0];
+    publishedEventSettings={eventType:e.event_type==='Engagement'?'Engagement':'Wedding',coupleNames:e.couple_name||e.event_name||''};
+    updateEventHeading();
+    return;
+  }
   const row=rows[0];
   if(!['Wedding','Engagement'].includes(row.event_type)||typeof row.couple_names!=='string')throw Error('Format pengaturan tidak valid');
   publishedEventSettings={eventType:row.event_type,coupleNames:row.couple_names};
@@ -390,7 +400,16 @@ async function saveEventSettings(){
   });
   if(!r.ok)throw Error('Supabase HTTP '+r.status+': '+(await r.text()).slice(0,160));
   const rows=await r.json();
-  if(!rows.length)throw Error('Tidak ada data yang diperbarui. Periksa izin staf dan tabel pengaturan.');
+  if(!rows.length){
+   // Event baru belum mempunyai row pengaturan: buat hanya untuk event terpilih.
+   const insert=await fetch(SB_URL+'/rest/v1/kt_event_settings',{
+    method:'POST',headers:{apikey:SB_KEY,Authorization:'Bearer '+staffToken,'Content-Type':'application/json',Prefer:'return=representation'},
+    body:JSON.stringify({event_id:ktRequireEvent(),event_type:eventType,couple_names:coupleNames})
+   });
+   if(!insert.ok)throw Error('Belum bisa membuat pengaturan event: '+(await insert.text()).slice(0,180));
+   const inserted=await insert.json();
+   if(!inserted.length)throw Error('Pengaturan event tidak terkonfirmasi.');
+  }
   publishedEventSettings={eventType,coupleNames};updateEventHeading();
   status.textContent='Berhasil dipublish! Semua tamu akan melihat perubahan saat membuka atau refresh QR.';
  }catch(e){status.textContent='Publish gagal: '+e.message;}
@@ -1070,11 +1089,26 @@ function ktUpdateLayoutEventBanner(){
 }
 async function ktSelectAdminEvent(id){
  if(!ktAdminRole||!ktEventRegistry.some(e=>e.id===id)){ktSelectedEventId='';objects=[];selected=-1;history=[];document.getElementById('ktLegacyPresetButton').style.display='none';ktUpdateLayoutEventBanner();refreshMaps();return;}
- ktSelectedEventId=id;ktUpdateLayoutEventBanner();document.getElementById('ktLegacyPresetButton').style.display=id===KT_LEGACY_EVENT_ID?'':'none';document.getElementById('route-table').value='1';const status=document.getElementById('ktActiveEventStatus');status.textContent='Memuat wedding terpilih…';
+ ktSelectedEventId=id;
+ publishedEventSettings={eventType:'Wedding',coupleNames:''};updateEventHeading();
+ ktUpdateLayoutEventBanner();document.getElementById('ktLegacyPresetButton').style.display=id===KT_LEGACY_EVENT_ID?'':'none';document.getElementById('route-table').value='1';const status=document.getElementById('ktActiveEventStatus');status.textContent='Memuat wedding terpilih…';
  staffGuests=[];objects=[];published=[];selected=-1;history=[];renderLiveStaff();
  document.getElementById('adminGuestManager').classList.add('hidden');
  document.getElementById('adminGuestEditor').classList.add('hidden');
  try{await loadStaffGuests();await ktLoadLayoutDraft();await ktLoadPublishedLayout();await loadPublishedEventSettings();
+  // Form pengaturan otomatis mengikuti metadata wedding yang dipilih Admin.
+  const activeEvent=ktEventRegistry.find(e=>e.id===id);
+  if(activeEvent){
+   const eventType=activeEvent.event_type==='Engagement'?'Engagement':'Wedding';
+   const coupleNames=activeEvent.couple_name||activeEvent.event_name||'';
+   const settings=readEventSettings();
+   if(!settings.coupleNames){
+    publishedEventSettings={eventType,coupleNames};
+    updateEventHeading();
+   }
+   document.getElementById('settingEventType').value=eventType;
+   document.getElementById('settingCoupleNames').value=settings.coupleNames||coupleNames;
+  }
   adminRenderSummary();adminRenderGuests();status.textContent='Wedding aktif: '+ktEventRegistry.find(e=>e.id===id).event_name+'. '+staffGuests.length+' undangan. Data wedding lain tidak ditampilkan.';
  }catch(e){status.textContent='Gagal memuat wedding: '+e.message;}
 }
