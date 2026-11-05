@@ -615,17 +615,18 @@ renderGuest=function(){
 async function searchPublicGuest(){
  if(staffToken){staffGuestRenderer();return;}
  const outGuard=document.getElementById('guestresult');if(!ktPublicEventId()){outGuard.textContent='Link wedding belum lengkap. Hubungi Kreativthings untuk QR yang benar.';return;}
- if(ktPublicEventId()!==KT_LEGACY_EVENT_ID){outGuard.textContent='Pencarian tamu untuk wedding ini belum diaktifkan sampai layanan pencarian aman mendukung filter event.';return;}
  const q=document.getElementById('guestquery').value.trim();
+ const requestedEventId=ktPublicEventId();
  const out=document.getElementById('guestresult');
  if(q.length<3){out.innerHTML='<div class="notice">Ketik minimal 3 huruf.</div>';return;}
  out.innerHTML='<div class="notice">Sedang mencari…</div>';
  try{
   const r=await fetch(SB_URL+'/functions/v1/guest-search-secure',{
    method:'POST',headers:{'Content-Type':'application/json'},
-   body:JSON.stringify({name:q})
+   body:JSON.stringify({name:q,event_id:requestedEventId})
   });
   const payload=await r.json();
+  if(requestedEventId!==ktPublicEventId()||q!==document.getElementById('guestquery').value.trim())return;
   if(!r.ok)throw Error(payload.error||'Pencarian belum tersedia ('+r.status+').');
   if(!Array.isArray(payload.results))throw Error('Format hasil pencarian tidak valid.');
   publicMatches=payload.results;
@@ -1138,7 +1139,7 @@ async function ktSelectAdminEvent(id){
 }
 function ktCopyGuestLink(){
  const id=ktRequireEvent(),url=new URL(location.href);url.searchParams.set('event',id);
- navigator.clipboard.writeText(url.toString()).then(()=>alert('Link guest wedding disalin. Untuk event baru, pencarian tamu belum diaktifkan sampai Edge Function diperbarui.')).catch(()=>prompt('Salin link:',url.toString()));
+ navigator.clipboard.writeText(url.toString()).then(()=>alert('Link guest untuk wedding ini berhasil disalin. Pastikan Edge Function Multi-Event sudah di-deploy sebelum dibagikan kepada tamu.')).catch(()=>prompt('Salin link:',url.toString()));
 }
 async function ktResolveStaffEvent(){
  const r=await fetch(SB_URL+'/auth/v1/user',{headers:{apikey:SB_KEY,Authorization:'Bearer '+staffToken}});
