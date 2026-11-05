@@ -362,7 +362,7 @@ body{background:#faf6f0}
 #staffLogin{max-width:760px;margin:12px auto;padding:20px}#staffLogin.hidden{display:none!important}
 #staffLogin input{margin-bottom:10px}#staffStatus{margin:10px 0;color:#765a3e}
 </style>
-<div id="staffPortal"><button id="eventSettingsButton" class="hidden" onclick="openEventSettings()">⚙ Pengaturan Acara</button> <button onclick="openStaffLogin()">Staff Login</button></div>
+<div id="staffPortal"><button id="eventSettingsButton" class="hidden" style="display:none!important" onclick="openEventSettings()">⚙ Pengaturan Acara</button> <button onclick="openStaffLogin()">Staff Login</button></div>
 <section id="eventSettings" class="panel hidden" style="max-width:760px;margin:12px auto;padding:20px">
  <h2>Pengaturan Acara • Kreativthings</h2>
  <p class="muted">Ubah judul dan nama pasangan tanpa mengedit HTML.</p>
@@ -376,7 +376,8 @@ body{background:#faf6f0}
 </section>
 <script>
 async function openEventSettings(){
- if(!staffToken){openStaffLogin();staffStatus('Silakan login staf terlebih dahulu untuk membuka pengaturan acara.');return;}
+ if(!staffToken||!ktAdminRole){alert('Pengaturan Acara hanya tersedia untuk Admin.');return;}
+ if(!ktIsUUID(ktSelectedEventId)){alert('Pilih wedding di Dashboard Admin terlebih dahulu.');return;}
  await loadPublishedEventSettings();
  const settings=readEventSettings();
  document.getElementById('settingEventType').value=settings.eventType;
@@ -703,7 +704,7 @@ body.kt-admin-layout #staffPortal{display:none!important}
  <div id="ktLegacyEventData" class="hidden">
  <div class="notice">Daftar tamu dan denah di bawah mengikuti wedding yang dipilih di atas.</div>
  <div class="metrics"><div class="metric"><small>Total undangan</small><strong id="adminTotal">0</strong></div><div class="metric"><small>Sudah check-in</small><strong id="adminChecked">0</strong></div><div class="metric"><small>Pax hadir aktual</small><strong id="adminPax">0</strong></div></div>
- <div class="admin-actions"><button class="primary" onclick="openEventSettings()">⚙ Pengaturan Acara</button><button onclick="adminShowGuests()">Daftar Tamu Online</button><button id="adminExportButton" onclick="adminExportGuests()">⬇ Export Daftar Tamu (CSV)</button><button onclick="adminOpenNewGuest()">+ Tambah Tamu</button><button onclick="ktOpenExcelImport()">📄 Import Excel</button><button onclick="adminOpenLayout()">Edit Denah Online</button><button onclick="adminBackToStaff()">Kembali ke Staff</button></div>
+ <div class="admin-actions"><button onclick="adminShowGuests()">Daftar Tamu Online</button><button id="adminExportButton" onclick="adminExportGuests()">⬇ Export Daftar Tamu (CSV)</button><button onclick="adminOpenNewGuest()">+ Tambah Tamu</button><button onclick="ktOpenExcelImport()">📄 Import Excel</button><button onclick="adminOpenLayout()">Edit Denah Online</button><button onclick="adminBackToStaff()">Kembali ke Staff</button></div>
  <div id="adminNewGuest" class="admin-editor hidden">
  <h2>Tambah Tamu Baru</h2>
  <p class="muted">Data akan disimpan online di Supabase dan dapat dicari oleh staf maupun tamu melalui QR.</p>
@@ -1111,6 +1112,7 @@ function ktUpdateLayoutEventBanner(){
 }
 async function ktSelectAdminEvent(id){
  if(!ktAdminRole||!ktEventRegistry.some(e=>e.id===id)){ktSelectedEventId='';objects=[];selected=-1;history=[];document.getElementById('ktLegacyPresetButton').style.display='none';ktUpdateLayoutEventBanner();refreshMaps();return;}
+ document.getElementById('eventSettings').classList.add('hidden');
  ktSelectedEventId=id;
  publishedEventSettings={eventType:'Wedding',coupleNames:''};updateEventHeading();
  ktUpdateLayoutEventBanner();document.getElementById('ktLegacyPresetButton').style.display=id===KT_LEGACY_EVENT_ID?'':'none';document.getElementById('route-table').value='1';const status=document.getElementById('ktActiveEventStatus');status.textContent='Memuat wedding terpilih…';
@@ -1532,7 +1534,7 @@ body.kt-screen-admin #ktScreenNav,body.kt-screen-staff #ktScreenNav,body.kt-scre
   document.getElementById('guest').classList.toggle('hidden',screen!=='guest');
   document.getElementById('admin').classList.toggle('hidden',screen!=='layout');
   document.getElementById('guests').classList.add('hidden');
-  document.getElementById('eventSettings').classList.add('hidden');
+  if(screen!=='admin')document.getElementById('eventSettings').classList.add('hidden');
   ktStaffReturnButton.hidden=true;
   nav.querySelectorAll('[data-screen]').forEach(b=>{
    const target=b.dataset.screen;
@@ -1613,5 +1615,30 @@ body.kt-screen-admin #ktScreenNav,body.kt-screen-staff #ktScreenNav,body.kt-scre
  add=function(kind){oldAdd(kind);if(kind==='facility'&&selected>=0&&objects[selected]?.id==='New Facility')notice('Ubah nama fasilitas menjadi Entrance, lalu geser ke posisi pintu masuk.');};
  const oldPublish=ktPublishLayoutOnline;
  ktPublishLayoutOnline=async function(){if(pathMode){alert('Klik Selesai Gambar Jalur sebelum publish.');return;}return oldPublish();};
+})();
+</script>
+
+<style>
+/* Pengaturan Acara is admin-only, never shown on public guest screen. */
+body:not(.kt-screen-admin) #eventSettings{display:none!important}
+#eventSettingsButton{display:none!important}
+#eventSettings{max-width:none!important;margin:16px 0!important}
+</style>
+<script id="kt-admin-only-event-settings">
+(function(){
+ const panel=document.getElementById('eventSettings');
+ const eventPanel=document.getElementById('ktActiveEventPanel');
+ if(panel&&eventPanel){
+  eventPanel.insertAdjacentElement('afterend',panel);
+  const heading=panel.querySelector('h2');
+  if(heading)heading.textContent='Pengaturan Acara • Khusus Admin';
+  const info=panel.querySelector('.notice');
+  if(info)info.textContent='Pengaturan ini hanya untuk wedding yang dipilih di atas. Data tamu dan denah wedding lain tidak diubah.';
+  const launch=document.createElement('button');
+  launch.type='button';launch.className='primary';launch.textContent='⚙ Pengaturan Acara';
+  launch.style.marginTop='10px';
+  launch.addEventListener('click',()=>openEventSettings());
+  eventPanel.appendChild(launch);
+ }
 })();
 </script>
