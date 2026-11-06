@@ -701,7 +701,8 @@ body.kt-admin-layout #staffPortal{display:none!important}
  <p id="ktAssignStatus" class="muted" role="status">Masukkan username Staff (atau email untuk akun lama), lalu pilih wedding.</p>
  </div></div>
  <div class="admin-editor" id="ktActiveEventPanel"><h2>Wedding yang Sedang Dikelola</h2><p class="muted">Pilih event sebelum membuka daftar tamu atau mengedit denah. Semua penyimpanan ditujukan hanya ke event terpilih.</p><select id="ktAdminActiveEvent" onchange="ktSelectAdminEvent(this.value)"><option value="">Pilih wedding terlebih dahulu</option></select><p id="ktActiveEventStatus" class="muted" role="status">Belum ada wedding dipilih.</p><button type="button" onclick="ktCopyGuestLink()">Salin Link Guest untuk Wedding Ini</button></div>
- <div style="margin:14px 0"><button type="button" id="ktLegacyToggle" aria-expanded="false" aria-controls="ktLegacyEventData" onclick="ktToggleLegacyEventData()">▸ Tampilkan Data Event Sebelumnya</button><p class="muted" style="font-size:12px;margin:8px 0">Data event sebelumnya disembunyikan agar dashboard lebih rapi. Tidak ada data yang dihapus.</p></div>
+ <div class="admin-editor" id="ktGuestQuickPanel"><h2>Kelola Daftar Tamu • Wedding Aktif</h2><p class="muted">Semua tindakan di bawah berlaku hanya untuk wedding yang dipilih pada bagian <b>Wedding yang Sedang Dikelola</b>. Periksa nama wedding sebelum mengimpor atau mengubah tamu.</p><p id="ktGuestQuickEvent" class="notice" role="status">Pilih wedding aktif terlebih dahulu.</p><div class="admin-actions"><button type="button" class="primary" onclick="ktGuestQuickAction('list')">Daftar Tamu Online</button><button type="button" onclick="ktGuestQuickAction('add')">+ Tambah Tamu</button><button type="button" onclick="ktGuestQuickAction('excel')">Import Excel</button><button type="button" onclick="ktGuestQuickAction('export')">Export CSV</button></div></div>
+ <div style="margin:14px 0"><button type="button" id="ktLegacyToggle" aria-expanded="false" aria-controls="ktLegacyEventData" onclick="ktToggleLegacyEventData()">▸ Tampilkan Pengaturan Lanjutan</button><p class="muted" style="font-size:12px;margin:8px 0">Data event sebelumnya disembunyikan agar dashboard lebih rapi. Tidak ada data yang dihapus.</p></div>
  <div id="ktLegacyEventData" class="hidden">
  <div class="notice">Daftar tamu dan denah di bawah mengikuti wedding yang dipilih di atas.</div>
  <div class="metrics"><div class="metric"><small>Total undangan</small><strong id="adminTotal">0</strong></div><div class="metric"><small>Sudah check-in</small><strong id="adminChecked">0</strong></div><div class="metric"><small>Pax hadir aktual</small><strong id="adminPax">0</strong></div></div>
@@ -1256,13 +1257,33 @@ ktLoadPublishedLayout();
 
 <script>
 // Hide legacy event information by default; does not change or delete any records.
+function ktGuestQuickAction(action){
+ ktUpdateGuestQuickEvent();
+ if(!staffToken||!ktAdminRole){alert('Login Admin diperlukan.');return;}
+ const select=document.getElementById('ktAdminActiveEvent');
+ if(!select||!select.value){alert('Pilih wedding aktif terlebih dahulu.');return;}
+ const panel=document.getElementById('ktLegacyEventData');
+ if(panel.classList.contains('hidden'))ktToggleLegacyEventData();
+ if(action==='list')adminShowGuests();
+ else if(action==='add')adminOpenNewGuest();
+ else if(action==='excel')ktOpenExcelImport();
+ else if(action==='export')adminExportGuests();
+}
+function ktUpdateGuestQuickEvent(){
+ const select=document.getElementById('ktAdminActiveEvent');
+ const label=document.getElementById('ktGuestQuickEvent');
+ if(!select||!label)return;
+ const option=select.options[select.selectedIndex];
+ label.textContent=select.value?'Wedding dipilih: '+(option?option.textContent:''):'Pilih wedding aktif terlebih dahulu.';
+}
+document.addEventListener('change',function(e){if(e.target&&e.target.id==='ktAdminActiveEvent')ktUpdateGuestQuickEvent();});
 function ktToggleLegacyEventData(){
  const panel=document.getElementById('ktLegacyEventData');
  const button=document.getElementById('ktLegacyToggle');
  const opening=panel.classList.contains('hidden');
  panel.classList.toggle('hidden',!opening);
  button.setAttribute('aria-expanded',String(opening));
- button.textContent=opening?'▾ Sembunyikan Data Event Sebelumnya':'▸ Tampilkan Data Event Sebelumnya';
+ button.textContent=opening?'▾ Sembunyikan Pengaturan Lanjutan':'▸ Tampilkan Pengaturan Lanjutan';
 }
 // Multi-event phase 1: registry only. Deliberately does NOT change active guest/layout queries.
 async function ktFetchEvents(){
