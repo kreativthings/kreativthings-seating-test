@@ -1184,12 +1184,18 @@ function ktApplyPublishedLayout(rows){
  published=value.filter(o=>o&&typeof o.id==='string'&&['table','facility'].includes(o.kind)&&Number.isFinite(o.x)&&Number.isFinite(o.y)).map(o=>({...o}));
 }
 async function ktLoadPublishedLayout(){
+ const requestedEventId=ktPublicEventId();
  published=[];
- if(!ktPublicEventId())return;
+ if(!requestedEventId)return;
  try{
-  const r=await fetch(SB_URL+(ktPublicEventId()===KT_LEGACY_EVENT_ID?'/rest/v1/kt_published_layout?select=published_layout&id=eq.1':'/rest/v1/kt_seating_layouts?select=published_layout&event_id=eq.'+encodeURIComponent(ktPublicEventId())),{headers:{apikey:SB_KEY},cache:'no-store'});
+  // Guest View reads ONLY the public published view, scoped to this wedding.
+  // Never query the admin-only kt_seating_layouts table with an anon key.
+  const url=SB_URL+'/rest/v1/kt_published_layout?select=published_layout&event_id=eq.'+encodeURIComponent(requestedEventId)+'&limit=1';
+  const r=await fetch(url,{headers:{apikey:SB_KEY},cache:'no-store'});
   if(!r.ok)throw Error('HTTP '+r.status);
-  ktApplyPublishedLayout(await r.json());
+  const rows=await r.json();
+  if(requestedEventId!==ktPublicEventId())return; // Ignore stale event responses.
+  ktApplyPublishedLayout(rows);
   const view=document.getElementById('viewmap');
   if(view&&document.getElementById('guestmapbox')&&!document.getElementById('guestmapbox').classList.contains('hidden')){
    const target=window.ktActiveGuestTable;
