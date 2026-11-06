@@ -887,7 +887,21 @@ async function adminCreateGuest(){
  const pax=Number(document.getElementById('adminNewPax').value);
  const status=document.getElementById('adminNewStatus');
  if(!name||!Number.isInteger(pax)||pax<1){status.textContent='Isi nama dan jumlah pax minimal 1.';return;}
- if(table&&!published.some(o=>o.kind==='table'&&String(o.id).toLowerCase()===table.toLowerCase())){status.textContent='Nomor meja tidak ada pada denah. Periksa kembali.';return;}
+ if(table){
+  // Validate against the currently selected wedding's online draft first.
+  // Never use the previously loaded public layout from another wedding.
+  try{
+   const eventId=ktRequireEvent();
+   const layouts=await sbStaff(KT_LAYOUT_TABLE+'?select=draft_layout,published_layout&event_id=eq.'+encodeURIComponent(eventId));
+   if(ktSelectedEventId!==eventId)throw Error('Wedding aktif berubah. Coba lagi.');
+   const record=layouts?.[0]||{};
+   const layout=Array.isArray(record.draft_layout)&&record.draft_layout.length?record.draft_layout:record.published_layout;
+   if(!Array.isArray(layout)||!layout.length){status.textContent='Denah wedding ini belum tersedia. Simpan Draft Online dahulu.';return;}
+   if(!layout.some(o=>o.kind==='table'&&String(o.id).trim().toLowerCase()===table.toLowerCase())){
+    status.textContent='Nomor meja '+table+' tidak ada pada draft/published denah wedding ini. Periksa kembali.';return;
+   }
+  }catch(e){status.textContent='Gagal memeriksa denah wedding aktif: '+e.message;return;}
+ }
  if(!confirm('Tambahkan '+name+' ('+pax+' pax) ke Supabase?'))return;
  const btn=document.getElementById('adminCreateButton');
  btn.disabled=true;status.textContent='Menyimpan tamu baru…';
