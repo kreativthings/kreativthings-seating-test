@@ -38,7 +38,7 @@
 <small id="ktRotationValue">0°</small>
 <div class="toolbar" style="margin-top:8px"><button type="button" onclick="ktResetTransform()">Reset Ukuran & Rotasi</button></div>
 <p class="muted" style="font-size:12px">Ukuran dan rotasi hanya mengubah tampilan objek, bukan kapasitas atau jalur tamu.</p>
-</div><div id="tableprops"><label>Kapasitas</label><input id="p-capacity" type="number" min="0" onchange="edit('capacity',Number(this.value))"><label>Section</label><select id="p-section" onchange="edit('section',this.value)"><option>A</option><option>B</option><option>C</option><option>D</option><option>E</option><option>F</option></select><label>Bentuk</label><select id="p-shape" onchange="edit('shape',this.value)"><option value="rect">Kotak</option><option value="long">Persegi panjang</option><option value="round">Bulat</option></select></div><button style="margin-top:14px" onclick="removeSelected()">Hapus objek</button></div><hr><div id="stats" class="muted"></div><label>Cari meja</label><input id="locate" placeholder="1" oninput="selectByNumber(this.value)"><p class="muted" style="font-size:12px">Tambahkan fasilitas bernama Entrance, lalu geser ke pintu masuk yang sebenarnya. Jalur manual harus dibuat untuk setiap meja yang membutuhkan petunjuk arah.</p></aside></div>
+</div><div id="tableprops"><label>Kapasitas</label><input id="p-capacity" type="number" min="0" onchange="edit('capacity',Number(this.value))"><input type="hidden" id="p-section"><label>Bentuk</label><select id="p-shape" onchange="edit('shape',this.value)"><option value="rect">Kotak</option><option value="long">Persegi panjang</option><option value="round">Bulat</option></select></div><button style="margin-top:14px" onclick="removeSelected()">Hapus objek</button></div><hr><div id="stats" class="muted"></div><label>Cari meja</label><input id="locate" placeholder="1" oninput="selectByNumber(this.value)"><p class="muted" style="font-size:12px">Tambahkan fasilitas bernama Entrance, lalu geser ke pintu masuk yang sebenarnya. Jalur manual harus dibuat untuk setiap meja yang membutuhkan petunjuk arah.</p></aside></div>
 <div id="guests" class="panel hidden"><h2>Guest Assignment</h2><p class="muted">Mode lama untuk data lokal. Gunakan Daftar Tamu Online pada Dashboard Admin untuk data wedding.</p><div class="two"><div><label>Nama tamu</label><input id="newname" placeholder="Nama undangan"></div><div><label>Nomor meja (opsional)</label><input id="newtable" placeholder="55A"></div><div><label>Jumlah pax (opsional)</label><input id="newpax" type="number" min="1" value="2"></div></div><div class="toolbar" style="margin-top:13px"><button class="primary" onclick="addGuest()">Tambah Tamu</button><button onclick="document.getElementById('csvfile').click()">Import CSV</button><input hidden id="csvfile" type="file" accept=".csv,text/csv" onchange="importCSV(event)"><button onclick="downloadCSV()">Export CSV</button></div><div id="guestrows"></div></div>
 <div id="staff" class="panel hidden"><h2>Staff Registration • Supabase</h2><div id="ktStaffEventBanner" class="notice" role="status" style="border:1px solid #d9c7b2"><strong>Wedding aktif: belum diverifikasi</strong><div>Menunggu konfirmasi penugasan dari Supabase.</div></div><div class="metrics"><div class="metric"><small>Undangan check-in</small><strong id="checked">0</strong></div><div class="metric"><small>Pax hadir aktual</small><strong id="arrived">0</strong></div></div><label>Cari nama atau nomor meja</label><input id="staffquery" placeholder="Ketik nama / meja" oninput="renderStaff()"><div id="staffrows"></div><div class="notice">Data check-in staf tersimpan di Supabase setelah login.</div></div>
 <div id="guest" class="panel hidden guest-shell"><div class="guest-top"><div class="guest-brand">KREATIVTHINGS <span>SMART SEATING</span></div><div class="guest-ornament">✦</div><h2 id="eventWelcomeTitle">Welcome to Our Engagement</h2><div id="eventCoupleNames" class="event-couple-names"></div><p>Find your seat with ease</p></div><div class="guest-inner"><div class="guest-search-card"><label for="guestquery">CARI NAMA UNDANGAN</label><div class="guest-search-row"><input id="guestquery" type="search" autocomplete="off" placeholder="Nama depan atau belakang..." oninput="renderGuest()" onkeydown="if(event.key==='Enter')searchPublicGuest()"><button type="button" onclick="document.getElementById('guestquery').value='';renderGuest();document.getElementById('guestquery').focus()" aria-label="Hapus pencarian">✕</button></div><p class="guest-hint">Cukup ketik nama depan atau nama belakang (minimal 3 huruf), lalu tekan Cari Nama.</p><button type="button" class="guest-route-button" onclick="searchPublicGuest()">Cari Nama</button></div><div id="guestresult" aria-live="polite"></div><div id="guestmapbox" class="hidden"><div class="guest-map-title">Petunjuk arah dari Entrance</div><p style="font-size:12px;text-align:center;color:#806044">← Geser denah ke kiri atau kanan →</p><div class="guest-map-scroll"><svg id="viewmap" viewBox="0 0 1000 750"></svg></div><button class="guest-back" onclick="document.getElementById('guestmapbox').classList.add('hidden');document.getElementById('guestquery').focus()">← Kembali ke hasil pencarian</button></div><p class="guest-footer">Need assistance? Please ask our Kreativthings crew.</p></div></div></div>
@@ -99,7 +99,7 @@ if(ktIsLegacyLayoutContext()||data.some(o=>o.ktVenueTemplate==='shanti')){
 svg.append(node('path',{d:'M 12 8 H 920 V 78 H 884 V 170 H 850 V 275 H 825 V 340 H 820 V 346 H 600 V 347 H 365 V 337 H 145 L 130 326 H 12 Z',fill:'#f8d9dc',stroke:'#e96b83','stroke-width':3,'stroke-dasharray':'10 7','stroke-linejoin':'round'}));
 // Physical access points (not tables).
 for(const [x,label] of [[590,'Tangga 1 · F1/F2'],[360,'Tangga 2 · F3']]){svg.append(node('rect',{x:x-17,y:341,width:34,height:36,rx:4,fill:'#e6c58b',stroke:'#9c713c','stroke-width':2}));for(let j=0;j<3;j++)svg.append(node('line',{x1:x-10,y1:349+j*8,x2:x+9,y2:349+j*8,stroke:'#5e472a','stroke-width':2}));svg.append(node('text',{x,y:333,'font-size':12,'text-anchor':'middle',fill:'#6a482c','font-weight':'bold'},label))}
-svg.append(node('text',{x:935,y:695,'font-size':13,'text-anchor':'middle',fill:'#6a482c'},'ENTRANCE'));[['F3',250,235],['F2',475,175],['F1',660,235],['A',815,380],['B',650,525],['C',440,525],['D',260,525],['E',55,520]].forEach(([s,x,y])=>{if(svg.id!=='viewmap')svg.append(node('text',{x,y,fill:'#d2c2ae','font-size':23,'font-weight':700,'text-anchor':'middle'},'SEC '+s))});}
+svg.append(node('text',{x:935,y:695,'font-size':13,'text-anchor':'middle',fill:'#6a482c'},'ENTRANCE'));/* Section labels hidden; physical floor boundaries and stairs retained. */}
 data.forEach((o,i)=>{let g=node('g',{'data-i':i,class:interactive?'item'+(selected===i?' selected':''):''});let x=o.x*10,y=o.y*7.5,scale=Math.max(.5,Math.min(2,Number(o.scale)||1)),rotation=Number(o.rotation)||0;
  const ws=Math.max(.5,Math.min(3,Number(o.widthScale)||1)),hs=Math.max(.4,Math.min(2.5,Number(o.heightScale)||1));
  const shapeGroup=node('g',{transform:`translate(${x} ${y}) rotate(${rotation}) scale(${scale*ws} ${scale*hs})`});
@@ -341,7 +341,7 @@ let pathStr=coords.map((p,i)=>(i?'L':'M')+p[0]+' '+p[1]).join(' ');
  for(let i=1;i<coords.length;i++){let a=coords[i-1],b=coords[i],dx=b[0]-a[0],dy=b[1]-a[1],len=Math.hypot(dx,dy);if(len<24)continue;let x=(a[0]+b[0])/2,y=(a[1]+b[1])/2,angle=Math.atan2(dy,dx)*180/Math.PI;g.append(node('path',{d:'M -8 -5 L 0 0 L -8 5',stroke:'#218769','stroke-width':3,fill:'none',transform:`translate(${x} ${y}) rotate(${angle})`}))}
  g.append(node('circle',{cx:coords[0][0],cy:coords[0][1],r:9,fill:'#218769',stroke:'#fff','stroke-width':3}));
  g.append(node('circle',{cx:t.x*10,cy:t.y*7.5,r:30,stroke:'#c79c48','stroke-width':5,fill:'none'}));
- g.append(node('text',{x:20,y:30,'font-size':15,fill:'#755d3c'},`Rute ${key||'tanpa section'} • demo belum divalidasi`));
+ g.append(node('text',{x:20,y:30,'font-size':15,fill:'#755d3c'},'Preview jalur • periksa posisi'));
 }
 function refreshMaps(){let note=document.querySelector('#map + p');if(note)note.style.display=ktIsLegacyLayoutContext()?'':'none';let svg=document.getElementById('map');let no=document.getElementById('route-table').value.trim();draw(svg,objects,no,true);if(no)paintRoutes(svg,objects,pathDraft,no,true);document.getElementById('route-status').textContent=no?(objects.some(o=>o.kind==='table'&&o.id.toLowerCase()===no.toLowerCase())?'Preview jalur • periksa posisi':'Meja tidak ditemukan'):(ktIsLegacyLayoutContext()?'Preset A–F v17 tersedia':'Denah ballroom bebas • jalur belum dibuat');}
 // Keep preview route visible after dragging or editing.
@@ -570,7 +570,7 @@ showGuestTable=function(i){
  const out=document.getElementById('guestresult');
  document.getElementById('guestmapbox').classList.add('hidden');
  if(!table||!t){out.innerHTML='<div class="notice">Nomor meja belum tersedia pada denah. Hubungi crew registrasi.</div>';return;}
- const sec=sectionRoute(t),up=sec.startsWith('F');
+ const sec=sectionRoute(t),up=String(sec||'').startsWith('F');
  const directions=sec==='F3'?'Dari Entrance, ikuti koridor bawah menuju Tangga 2. Setelah naik, jalan lurus dahulu, kemudian belok kiri menuju meja.':up?'Dari Entrance, ikuti koridor bawah menuju Tangga 1, lanjut lurus, lalu menuju meja.':'Dari Entrance, ikuti koridor lantai bawah menuju meja.';
  out.innerHTML=`<div class="guest-seat"><small>SELAMAT DATANG, ${esc(g.guest_name)}</small><div style="margin-top:15px;color:#99816a;font-size:12px;letter-spacing:.15em">NOMOR MEJA ANDA</div><h2>${esc(table)}</h2><p>${esc(directions)}</p><button class="guest-route-button" onclick="showGuestRoute('${esc(table)}')">Tampilkan Rute pada Denah</button></div>`;
 };
@@ -640,19 +640,27 @@ async function searchPublicGuest(){
   });
  }catch(e){out.textContent='Gagal mencari nama: '+e.message;}
 }
-function showPublicTable(i){
+async function showPublicTable(i){
  const g=publicMatches[i];if(!g)return;
  const table=String(g.table_number||'').trim();
- const t=published.find(o=>o.kind==='table'&&String(o.id).toLowerCase()===table.toLowerCase());
+ const eventId=ktPublicEventId();
  const out=document.getElementById('guestresult');
  document.getElementById('guestmapbox').classList.add('hidden');
- if(!table||!t){out.textContent='Nomor meja belum tersedia pada denah. Hubungi crew registrasi.';return;}
- const sec=sectionRoute(t),up=sec.startsWith('F');
- const directions=sec==='F3'?'Dari Entrance menuju Tangga 2. Setelah naik, jalan lurus dahulu, lalu belok kiri menuju meja.':up?'Dari Entrance menuju Tangga 1, naik lurus lalu menuju meja.':'Dari Entrance ikuti koridor lantai bawah menuju meja.';
+ if(!table){out.innerHTML='<div class="notice">Nomor meja belum ditentukan. Hubungi crew registrasi.</div>';return;}
+ let t=published.find(o=>o.kind==='table'&&String(o.id).trim().toLowerCase()===table.toLowerCase());
+ if(!t){
+  out.innerHTML='<div class="notice">Memeriksa denah wedding…</div>';
+  await ktLoadPublishedLayout();
+  if(eventId!==ktPublicEventId())return;
+  t=published.find(o=>o.kind==='table'&&String(o.id).trim().toLowerCase()===table.toLowerCase());
+ }
+ if(!t){out.innerHTML='<div class="notice">Meja '+esc(table)+' belum ditemukan pada denah wedding yang dipublikasikan. Minta Admin memeriksa denah event ini.</div>';return;}
+ const sec=sectionRoute(t),up=String(sec||'').startsWith('F');
+ const legacy=eventId===KT_LEGACY_EVENT_ID||published.some(o=>o.ktVenueTemplate==='shanti');
+ const directions=legacy?(sec==='F3'?'Dari Entrance menuju Tangga 2. Setelah naik, jalan lurus dahulu, lalu belok kiri menuju meja.':up?'Dari Entrance menuju Tangga 1, naik lurus lalu menuju meja.':'Dari Entrance ikuti koridor lantai bawah menuju meja.'):'Ikuti petunjuk arah menuju nomor meja Anda.';
  out.innerHTML=`<div class="guest-seat"><small>SELAMAT DATANG, ${esc(g.guest_name)}</small><div style="margin-top:15px;color:#99816a;font-size:12px;letter-spacing:.15em">NOMOR MEJA ANDA</div><h2>${esc(table)}</h2><p>${esc(directions)}</p><button id="showPublicRoute" class="guest-route-button">Tampilkan Rute pada Denah</button></div>`;
  document.getElementById('showPublicRoute').onclick=()=>showGuestRoute(table);
 }
-
 </script>
 <style>
 #adminDashboard{max-width:760px;margin:12px auto;padding:20px}#adminDashboard.hidden{display:none!important}
