@@ -713,7 +713,7 @@ body.kt-admin-layout #staffPortal{display:none!important}
  <label for="adminNewName">Nama undangan</label><input id="adminNewName" maxlength="200" placeholder="Nama tamu">
  <label for="adminNewCategory">Kategori</label><select id="adminNewCategory"><option value="Regular">Regular</option><option value="VIP">VIP</option><option value="VVIP">VVIP</option><option value="Family">Family</option></select>
  <label for="adminNewTable">Nomor meja</label><input id="adminNewTable" placeholder="Contoh: 35 atau 122" oninput="adminSuggestSection()">
- <label for="adminNewSection">Section</label><select id="adminNewSection"><option value="">Pilih section</option><option>A</option><option>B</option><option>C</option><option>D</option><option>E</option><option>F1</option><option>F2</option><option>F3</option></select>
+ 
  <label for="adminNewPax">Jumlah pax</label><input id="adminNewPax" type="number" min="1" step="1" value="2">
  <div class="admin-actions"><button id="adminCreateButton" class="primary" onclick="adminCreateGuest()">Simpan Tamu Online</button><button onclick="adminCloseNewGuest()">Batal</button></div>
  <p id="adminNewStatus" role="status"></p>
@@ -877,22 +877,17 @@ function adminOpenNewGuest(){
 function adminCloseNewGuest(){
  document.getElementById('adminNewGuest').classList.add('hidden');
 }
-function adminSuggestSection(){
- const table=document.getElementById('adminNewTable').value.trim();
- const t=published.find(o=>o.kind==='table'&&String(o.id).toLowerCase()===table.toLowerCase());
- if(t)document.getElementById('adminNewSection').value=sectionRoute(t);
-}
+function adminSuggestSection(){ /* Ballroom: section tidak digunakan. */ }
 async function adminCreateGuest(){
  if(!staffToken||!ktAdminRole)return;
  const name=document.getElementById('adminNewName').value.trim();
  const category=document.getElementById('adminNewCategory').value;
  const table=document.getElementById('adminNewTable').value.trim();
- const section=document.getElementById('adminNewSection').value;
+ const section=null;
  const pax=Number(document.getElementById('adminNewPax').value);
  const status=document.getElementById('adminNewStatus');
  if(!name||!Number.isInteger(pax)||pax<1){status.textContent='Isi nama dan jumlah pax minimal 1.';return;}
  if(table&&!published.some(o=>o.kind==='table'&&String(o.id).toLowerCase()===table.toLowerCase())){status.textContent='Nomor meja tidak ada pada denah. Periksa kembali.';return;}
- if(!section){status.textContent='Pilih section tamu.';return;}
  if(!confirm('Tambahkan '+name+' ('+pax+' pax) ke Supabase?'))return;
  const btn=document.getElementById('adminCreateButton');
  btn.disabled=true;status.textContent='Menyimpan tamu baru…';
@@ -903,7 +898,6 @@ async function adminCreateGuest(){
   adminRenderSummary();adminRenderGuests();
   document.getElementById('adminNewName').value='';
   document.getElementById('adminNewTable').value='';
-  document.getElementById('adminNewSection').value='';
   document.getElementById('adminNewPax').value='2';
   status.textContent='Berhasil! Tamu baru tersimpan online di Supabase.';
  }catch(e){status.textContent='Gagal menambahkan tamu: '+e.message;}
