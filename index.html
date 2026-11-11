@@ -680,14 +680,12 @@ async function showPublicTable(i){
  const out=document.getElementById('guestresult');
  document.getElementById('guestmapbox').classList.add('hidden');
  if(!table){out.innerHTML='<div class="notice">Nomor meja belum ditentukan. Hubungi crew registrasi.</div>';return;}
- let t=published.find(o=>o.kind==='table'&&String(o.id).trim().toLowerCase()===table.toLowerCase());
- if(!t){
-  out.innerHTML='<div class="notice">Memeriksa denah wedding…</div>';
-  await ktLoadPublishedLayout();
-  if(generation!==ktGuestSearchGeneration||eventId!==ktPublicEventId())return;
-  t=published.find(o=>o.kind==='table'&&String(o.id).trim().toLowerCase()===table.toLowerCase());
- }
- if(!t){out.innerHTML='<div class="notice">Meja '+esc(table)+' belum ditemukan pada denah wedding yang dipublikasikan. Minta Admin memeriksa denah event ini.</div>';return;}
+ out.innerHTML='<div class="notice">Memeriksa denah wedding…</div>';
+ const loaded=await ktLoadPublishedLayout();
+ if(generation!==ktGuestSearchGeneration||eventId!==ktPublicEventId())return;
+ if(!loaded){out.innerHTML='<div class="notice">Denah sementara tidak dapat dimuat. Coba lagi atau refresh halaman. Jika masih gagal, hubungi crew registrasi.</div>';return;}
+ const t=published.find(o=>o.kind==='table'&&String(o.id).trim().toLowerCase()===table.toLowerCase());
+ if(!t){out.innerHTML='<div class="notice">Meja '+esc(table)+' belum ditemukan pada denah wedding yang dipublikasikan. Minta Admin memeriksa nomor meja tamu dan denah event ini.</div>';return;}
  const sec=sectionRoute(t),up=String(sec||'').startsWith('F');
  const legacy=eventId===KT_LEGACY_EVENT_ID||published.some(o=>o.ktVenueTemplate==='shanti');
  const directions=legacy?(sec==='F3'?'Dari Entrance menuju Tangga 2. Setelah naik, jalan lurus dahulu, lalu belok kiri menuju meja.':up?'Dari Entrance menuju Tangga 1, naik lurus lalu menuju meja.':'Dari Entrance ikuti koridor lantai bawah menuju meja.'):'Ikuti petunjuk arah menuju nomor meja Anda.';
@@ -1216,22 +1214,40 @@ function ktApplyPublishedLayout(rows){
  if(!Array.isArray(value)||!value.length)throw Error('Denah published online kosong; tidak menggunakan denah bawaan sebagai pengganti.');
  published=value.filter(o=>o&&typeof o.id==='string'&&['table','facility'].includes(o.kind)&&Number.isFinite(o.x)&&Number.isFinite(o.y)).map(o=>({...o}));
 }
-async function ktLoadPublishedLayout(){
- published=[];
- if(!ktPublicEventId())return;
- try{
-  const r=await fetch(SB_URL+(ktPublicEventId()===KT_LEGACY_EVENT_ID?'/rest/v1/kt_published_layout?select=published_layout&id=eq.1':'/rest/v1/kt_seating_layouts?select=published_layout&event_id=eq.'+encodeURIComponent(ktPublicEventId())),{headers:{apikey:SB_KEY},cache:'no-store'});
-  if(!r.ok)throw Error('HTTP '+r.status);
-  ktApplyPublishedLayout(await r.json());
-  const view=document.getElementById('viewmap');
-  if(view&&document.getElementById('guestmapbox')&&!document.getElementById('guestmapbox').classList.contains('hidden')){
-   const target=window.ktActiveGuestTable;
-   if(target)showGuestRoute(target);
+// Shared event-specific loading prevents refresh/search races.
+let ktPublishedEventId='';
+let ktPublishedLoadPromise=null;
+let ktPublishedLoadingEvent='';
+async function ktLoadPublishedLayout(force=false){
+ const eventId=ktPublicEventId();
+ if(!eventId){published=[];ktPublishedEventId='';return false;}
+ if(!force&&ktPublishedEventId===eventId&&published.length)return true;
+ if(ktPublishedLoadPromise&&ktPublishedLoadingEvent===eventId)return ktPublishedLoadPromise;
+ if(ktPublishedEventId!==eventId){published=[];ktPublishedEventId='';}
+ ktPublishedLoadingEvent=eventId;
+ const task=(async()=>{
+  let lastError;
+  for(let attempt=0;attempt<3;attempt++){
+   try{
+    const url=SB_URL+(eventId===KT_LEGACY_EVENT_ID?'/rest/v1/kt_published_layout?select=published_layout&id=eq.1':'/rest/v1/kt_seating_layouts?select=published_layout&event_id=eq.'+encodeURIComponent(eventId));
+    const r=await fetch(url,{headers:{apikey:SB_KEY},cache:'no-store'});
+    if(!r.ok)throw Error('HTTP '+r.status);
+    const rows=await r.json();const value=rows?.[0]?.published_layout;
+    if(!Array.isArray(value)||!value.length)throw Error('Denah belum dipublikasikan untuk wedding ini');
+    const valid=value.filter(o=>o&&typeof o.id==='string'&&['table','facility'].includes(o.kind)&&Number.isFinite(o.x)&&Number.isFinite(o.y)).map(o=>({...o}));
+    if(!valid.length)throw Error('Data denah tidak valid');
+    if(ktPublicEventId()!==eventId)return false;
+    published=valid;ktPublishedEventId=eventId;return true;
+   }catch(e){lastError=e;if(attempt<2)await new Promise(resolve=>setTimeout(resolve,350*(attempt+1)));}
   }
- }catch(e){console.warn('Denah online belum tersedia:',e.message);
+  console.warn('Denah online gagal dimuat:',lastError);
   const status=document.getElementById('adminDashboardStatus');
-  if(status)status.textContent='Perhatian: denah online gagal dimuat ('+e.message+'). Jangan publish denah bawaan.';
- }
+  if(status)status.textContent='Denah online gagal dimuat: '+lastError.message;
+  return false;
+ })();
+ ktPublishedLoadPromise=task;
+ try{return await task;}
+ finally{if(ktPublishedLoadPromise===task){ktPublishedLoadPromise=null;ktPublishedLoadingEvent='';}}
 }
 async function ktLoadLayoutDraft(){
  if(!staffToken||!ktAdminRole)return;
