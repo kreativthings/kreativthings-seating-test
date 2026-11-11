@@ -572,7 +572,8 @@ showGuestTable=function(i){
  const t=published.find(o=>o.kind==='table'&&String(o.id).toLowerCase()===table.toLowerCase());
  const out=document.getElementById('guestresult');
  document.getElementById('guestmapbox').classList.add('hidden');
- if(!table||!t){out.innerHTML='<div class="notice">Nomor meja belum tersedia pada denah. Hubungi crew registrasi.</div>';return;}
+ if(!table||(!t&&!ktRobinHasTable(table))){out.innerHTML='<div class="notice">Nomor meja belum tersedia pada denah. Hubungi crew registrasi.</div>';return;}
+ if(!t){out.innerHTML=`<div class="guest-seat"><small>SELAMAT DATANG, ${esc(g.guest_name)}</small><div>NOMOR MEJA ANDA</div><h2>${esc(table)}</h2><button class="guest-route-button" onclick="showGuestRoute('${esc(table)}')">Tampilkan Rute pada Denah</button></div>`;return;}
  const sec=sectionRoute(t),up=String(sec||'').startsWith('F');
  const directions=sec==='F3'?'Dari Entrance, ikuti koridor bawah menuju Tangga 2. Setelah naik, jalan lurus dahulu, kemudian belok kiri menuju meja.':up?'Dari Entrance, ikuti koridor bawah menuju Tangga 1, lanjut lurus, lalu menuju meja.':'Dari Entrance, ikuti koridor lantai bawah menuju meja.';
  out.innerHTML=`<div class="guest-seat"><small>SELAMAT DATANG, ${esc(g.guest_name)}</small><div style="margin-top:15px;color:#99816a;font-size:12px;letter-spacing:.15em">NOMOR MEJA ANDA</div><h2>${esc(table)}</h2><p>${esc(directions)}</p><button class="guest-route-button" onclick="showGuestRoute('${esc(table)}')">Tampilkan Rute pada Denah</button></div>`;
@@ -669,8 +670,8 @@ async function showPublicTable(i){
   if(generation!==ktGuestSearchGeneration||eventId!==ktPublicEventId())return;
   t=published.find(o=>o.kind==='table'&&String(o.id).trim().toLowerCase()===table.toLowerCase());
  }
- if(!t){out.innerHTML='<div class="notice">Meja '+esc(table)+' belum ditemukan pada denah wedding yang dipublikasikan. Minta Admin memeriksa denah event ini.</div>';return;}
- const sec=sectionRoute(t),up=String(sec||'').startsWith('F');
+ if(!t && !ktRobinHasTable(table)){out.innerHTML='<div class="notice">Meja '+esc(table)+' belum ditemukan pada denah wedding yang dipublikasikan. Minta Admin memeriksa denah event ini.</div>';return;}
+ const sec=t?sectionRoute(t):'',up=String(sec||'').startsWith('F');
  const legacy=eventId===KT_LEGACY_EVENT_ID||published.some(o=>o.ktVenueTemplate==='shanti');
  const directions=legacy?(sec==='F3'?'Dari Entrance menuju Tangga 2. Setelah naik, jalan lurus dahulu, lalu belok kiri menuju meja.':up?'Dari Entrance menuju Tangga 1, naik lurus lalu menuju meja.':'Dari Entrance ikuti koridor lantai bawah menuju meja.'):'Ikuti petunjuk arah menuju nomor meja Anda.';
  out.innerHTML=`<div class="guest-seat"><small>SELAMAT DATANG, ${esc(g.guest_name)}</small><div style="margin-top:15px;color:#99816a;font-size:12px;letter-spacing:.15em">NOMOR MEJA ANDA</div><h2>${esc(table)}</h2><p>${esc(directions)}</p><button id="showPublicRoute" class="guest-route-button">Tampilkan Rute pada Denah</button></div>`;
@@ -1857,4 +1858,52 @@ ktOpenManagerEditor=function(id,card,button){
 };
 const ktManagerOriginalSignOut=staffSignOut;
 staffSignOut=function(){ktManagerRole=false;ktManagerDeletedGuests=[];document.getElementById("ktManagerTools")?.remove();ktManagerOriginalSignOut();};
+</script>
+<style>
+/* Robin & Dira: restored original 8-table route map, separate from other events. */
+#ktRobinMapHost{margin:10px auto 0;max-width:720px}
+#ktRobinMapHost svg{display:block;width:100%;height:auto;min-width:0!important;pointer-events:none;touch-action:auto!important}
+#ktRobinMapHost .kt-robin-caption{text-align:center;font-size:13px;color:#685848;margin:12px}
+</style>
+<script>
+const KT_ROBIN_EVENT_ID='fb2539be-196b-4c95-aeac-25c5a1853c60';
+const KT_ROBIN_POSITIONS=Object.freeze({A:[60,75],B:[155,75],CENTER:[250,75],D:[345,75],E:[440,75],C:[60,155],F:[345,155],G:[440,155]});
+function ktRobinHasTable(table){return ktPublicEventId()===KT_ROBIN_EVENT_ID&&Object.prototype.hasOwnProperty.call(KT_ROBIN_POSITIONS,String(table||'').trim().toUpperCase());}
+function ktRobinShowRoute(table){
+ const name=String(table||'').trim().toUpperCase();if(!ktRobinHasTable(name))return false;
+ const [x,y]=KT_ROBIN_POSITIONS[name];
+ const box=document.getElementById('guestmapbox');box.classList.remove('hidden');
+ const svg=document.getElementById('viewmap');svg.style.display='none';
+ let host=document.getElementById('ktRobinMapHost');if(!host){host=document.createElement('div');host.id='ktRobinMapHost';box.querySelector('.guest-map-scroll').append(host);}
+ host.replaceChildren();
+ const ns='http://www.w3.org/2000/svg';
+ const el=(tag,attrs={},value)=>{const n=document.createElementNS(ns,tag);Object.entries(attrs).forEach(([k,v])=>n.setAttribute(k,v));if(value!==undefined)n.textContent=value;return n;};
+ const map=el('svg',{viewBox:'0 0 500 270',role:'img','aria-label':'Denah Robin dan Dira, jalur dari Entrance ke meja '+name});
+ map.append(el('rect',{x:1,y:1,width:498,height:268,rx:10,fill:'#fffdf9',stroke:'#d7c9ba'}));
+ map.append(el('rect',{x:212,y:8,width:76,height:25,rx:3,fill:'#e9e2d9'}));
+ map.append(el('text',{x:250,y:25,'text-anchor':'middle','font-size':11,fill:'#6c6155'},'BACKDROP'));
+ for(const [id,[tx,ty]] of Object.entries(KT_ROBIN_POSITIONS)){
+  const active=id===name;
+  map.append(el('rect',{x:tx-39,y:ty-16,width:78,height:32,rx:5,fill:active?'#536d5d':'#eee7de',stroke:'#cfc4b8'}));
+  map.append(el('text',{x:tx,y:ty+4,'text-anchor':'middle','font-size':12,'font-weight':'bold',fill:active?'white':'#3c3632'},id));
+ }
+ let d='M250 218 L250 185';
+ if(name==='CENTER')d+=' L250 105';
+ else if(['A','B','D','E'].includes(name))d+=' L250 118 L'+x+' 118 L'+x+' 96';
+ else d+=' L'+x+' 185 L'+x+' 176';
+ map.append(el('path',{d,fill:'none',stroke:'#16846e','stroke-width':5,'stroke-linejoin':'round','stroke-linecap':'round','stroke-dasharray':'9 7'}));
+ map.append(el('circle',{cx:x,cy:name==='CENTER'?105:(['A','B','D','E'].includes(name)?96:176),r:7,fill:'#16846e'}));
+ map.append(el('path',{d:'M250 266 V240 M244 247 L250 238 L256 247',stroke:'#8e8173','stroke-width':2,fill:'none'}));
+ map.append(el('text',{x:250,y:232,'text-anchor':'middle','font-size':11,fill:'#6c6155'},'ENTRANCE'));
+ host.append(map);
+ const caption=document.createElement('p');caption.className='kt-robin-caption';caption.textContent=name==='CENTER'?'Dari Entrance, berjalan lurus menuju Center Table.':'Dari Entrance, ikuti garis hijau menuju Meja '+name+'.';host.append(caption);
+ box.scrollIntoView({behavior:'smooth',block:'start'});return true;
+}
+const ktOriginalShowGuestRoute=showGuestRoute;
+showGuestRoute=function(table){
+ if(ktRobinShowRoute(table))return;
+ const host=document.getElementById('ktRobinMapHost');if(host)host.remove();
+ document.getElementById('viewmap').style.display='';
+ return ktOriginalShowGuestRoute(table);
+};
 </script>
