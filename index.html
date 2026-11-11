@@ -596,10 +596,8 @@ ktStaffReturnButton.onclick=()=>{
  document.getElementById('staff').scrollIntoView({behavior:'smooth',block:'start'});
 };
 document.getElementById('guest').prepend(ktStaffReturnButton);
-const staffPreviewBtn=document.createElement('button');staffPreviewBtn.textContent='Lihat pencarian & denah di bawah ↓';staffPreviewBtn.onclick=openStaffGuestPreview;
-document.querySelector('#staff .metrics').after(staffPreviewBtn);
 const refreshBtn=document.createElement('button');refreshBtn.textContent='↻ Refresh status check-in';refreshBtn.onclick=async()=>{try{await loadStaffGuests();staffStatus('Status tamu diperbarui dari Supabase.')}catch(e){staffStatus('Refresh gagal: '+e.message)}};document.querySelector('#staff .metrics').after(refreshBtn);
-const staffGuide=document.createElement('p');staffGuide.className='muted';staffGuide.textContent='Setelah login, scroll ke bawah untuk cari nama dan melihat rute meja. Gunakan Refresh untuk melihat check-in dari HP staf lain.';document.querySelector('#staff .metrics').after(staffGuide);
+const staffGuide=document.createElement('p');staffGuide.className='muted';staffGuide.textContent='Cari nama atau nomor meja di bawah untuk mencatat kehadiran. Gunakan Refresh untuk melihat check-in dari HP staf lain.';document.querySelector('#staff .metrics').after(staffGuide);
 
 
 // Public RPC test: read-only name/table lookup. Public endpoint still needs
@@ -1184,18 +1182,12 @@ function ktApplyPublishedLayout(rows){
  published=value.filter(o=>o&&typeof o.id==='string'&&['table','facility'].includes(o.kind)&&Number.isFinite(o.x)&&Number.isFinite(o.y)).map(o=>({...o}));
 }
 async function ktLoadPublishedLayout(){
- const requestedEventId=ktPublicEventId();
  published=[];
- if(!requestedEventId)return;
+ if(!ktPublicEventId())return;
  try{
-  // Guest View reads ONLY the public published view, scoped to this wedding.
-  // Never query the admin-only kt_seating_layouts table with an anon key.
-  const url=SB_URL+'/rest/v1/kt_published_layout?select=published_layout&event_id=eq.'+encodeURIComponent(requestedEventId)+'&limit=1';
-  const r=await fetch(url,{headers:{apikey:SB_KEY},cache:'no-store'});
+  const r=await fetch(SB_URL+(ktPublicEventId()===KT_LEGACY_EVENT_ID?'/rest/v1/kt_published_layout?select=published_layout&id=eq.1':'/rest/v1/kt_seating_layouts?select=published_layout&event_id=eq.'+encodeURIComponent(ktPublicEventId())),{headers:{apikey:SB_KEY},cache:'no-store'});
   if(!r.ok)throw Error('HTTP '+r.status);
-  const rows=await r.json();
-  if(requestedEventId!==ktPublicEventId())return; // Ignore stale event responses.
-  ktApplyPublishedLayout(rows);
+  ktApplyPublishedLayout(await r.json());
   const view=document.getElementById('viewmap');
   if(view&&document.getElementById('guestmapbox')&&!document.getElementById('guestmapbox').classList.contains('hidden')){
    const target=window.ktActiveGuestTable;
@@ -1590,6 +1582,8 @@ body.kt-screen-admin #staffLogin,body.kt-screen-staff #staffLogin,body.kt-screen
 body.kt-screen-admin #ktScreenNav,body.kt-screen-staff #ktScreenNav,body.kt-screen-guest.kt-authenticated #ktScreenNav,body.kt-screen-layout #ktScreenNav{display:flex!important}
 #ktScreenNav{display:none;max-width:760px;margin:12px auto;padding:0 12px;gap:8px;flex-wrap:wrap}
 #ktScreenNav button{font-size:14px}
+body.kt-screen-staff #ktScreenNav{position:relative;margin:12px auto 14px;justify-content:flex-start}
+body.kt-screen-staff #ktScreenNav button{flex:0 1 auto}
 #ktScreenNav button.kt-current{background:#65503e;color:#fff}
 @media(max-width:760px){body.kt-screen-layout #admin{display:block!important}}
 </style>
@@ -1597,7 +1591,7 @@ body.kt-screen-admin #ktScreenNav,body.kt-screen-staff #ktScreenNav,body.kt-scre
 (function(){
  const nav=document.createElement('div');nav.id='ktScreenNav';nav.setAttribute('aria-label','Navigasi Smart Seating');
  nav.innerHTML='<button type="button" data-screen="admin">Dashboard Admin</button><button type="button" data-screen="staff">Staff Check-in</button><button type="button" data-screen="guest">Guest View</button><button type="button" data-screen="layout">Edit Denah</button><button type="button" data-screen="logout">Logout</button>';
- document.getElementById('adminDashboard').before(nav);
+ document.getElementById('staff').before(nav);
  function showScreen(screen){
   if(!staffToken&&screen!=='guest')screen='guest';
   if(!ktAdminRole&&(screen==='admin'||screen==='layout'))screen='staff';
