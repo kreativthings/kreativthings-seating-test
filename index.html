@@ -583,17 +583,27 @@ renderGuest=function(){
  const matches=staffGuests.map((g,i)=>({...g,i})).filter(g=>String(g.guest_name||'').toLowerCase().includes(q)).slice(0,15);
  out.innerHTML=matches.length?matches.map(g=>`<div class="result"><div><b>${esc(g.guest_name)}</b><br><small>${g.table_number?'Meja '+esc(g.table_number):'Meja belum ditentukan'}</small></div><button onclick="showGuestTable(${g.i})">Lihat meja</button></div>`).join(''):'<div class="notice">Nama belum ditemukan. Hubungi crew registrasi.</div>';
 };
-showGuestTable=function(i){
+showGuestTable=async function(i){
  if(!staffToken||i<0)return originalGuestSelect(i);
  const g=staffGuests[i];if(!g)return;
  const table=String(g.table_number||'').trim();
- const t=published.find(o=>o.kind==='table'&&String(o.id).toLowerCase()===table.toLowerCase());
+ const eventId=ktPublicEventId();
  const out=document.getElementById('guestresult');
  document.getElementById('guestmapbox').classList.add('hidden');
- if(!table||!t){out.innerHTML='<div class="notice">Nomor meja belum tersedia pada denah. Hubungi crew registrasi.</div>';return;}
+ if(!table){out.innerHTML='<div class="notice">Nomor meja belum ditentukan. Hubungi crew registrasi.</div>';return;}
+ out.innerHTML='<div class="notice">Memuat denah wedding…</div>';
+ // Staff/Admin preview must load the published layout for the selected wedding,
+ // just like public Guest View. Never rely on stale in-memory `published`.
+ const loaded=await ktLoadPublishedLayout(true);
+ if(eventId!==ktPublicEventId())return;
+ if(!loaded){out.innerHTML='<div class="notice">Denah online belum berhasil dimuat. Coba klik Lihat meja lagi atau refresh halaman.</div>';return;}
+ const t=published.find(o=>o.kind==='table'&&String(o.id).trim().toLowerCase()===table.toLowerCase());
+ if(!t){out.innerHTML='<div class="notice">Meja '+esc(table)+' belum ditemukan pada denah wedding ini. Periksa data meja tamu dan denah yang dipublish.</div>';return;}
  const sec=sectionRoute(t),up=String(sec||'').startsWith('F');
- const directions=sec==='F3'?'Dari Entrance, ikuti koridor bawah menuju Tangga 2. Setelah naik, jalan lurus dahulu, kemudian belok kiri menuju meja.':up?'Dari Entrance, ikuti koridor bawah menuju Tangga 1, lanjut lurus, lalu menuju meja.':'Dari Entrance, ikuti koridor lantai bawah menuju meja.';
- out.innerHTML=`<div class="guest-seat"><small>SELAMAT DATANG, ${esc(g.guest_name)}</small><div style="margin-top:15px;color:#99816a;font-size:12px;letter-spacing:.15em">NOMOR MEJA ANDA</div><h2>${esc(table)}</h2><p>${esc(directions)}</p><button class="guest-route-button" onclick="showGuestRoute('${esc(table)}')">Tampilkan Rute pada Denah</button></div>`;
+ const legacy=eventId===KT_LEGACY_EVENT_ID||published.some(o=>o.ktVenueTemplate==='shanti');
+ const directions=legacy?(sec==='F3'?'Dari Entrance menuju Tangga 2. Setelah naik, jalan lurus dahulu, lalu belok kiri menuju meja.':up?'Dari Entrance menuju Tangga 1, naik lurus lalu menuju meja.':'Dari Entrance ikuti koridor lantai bawah menuju meja.'):'Ikuti petunjuk arah menuju nomor meja Anda.';
+ out.innerHTML=`<div class="guest-seat"><small>SELAMAT DATANG, ${esc(g.guest_name)}</small><div style="margin-top:15px;color:#99816a;font-size:12px;letter-spacing:.15em">NOMOR MEJA ANDA</div><h2>${esc(table)}</h2><p>${esc(directions)}</p><button id="ktStaffGuestRoute" class="guest-route-button">Tampilkan Rute pada Denah</button></div>`;
+ document.getElementById('ktStaffGuestRoute').onclick=()=>showGuestRoute(table);
 };
 function openStaffGuestPreview(){
  if(!staffToken)return openStaffLogin();
@@ -1314,6 +1324,7 @@ async function ktPublishLayoutOnline(){
  if(!confirm('Publish posisi meja dan jalur manual yang sudah dibuat ke semua HP tamu? Pastikan rute telah diperiksa.'))return;
  if(await ktWriteLayout('published_layout')){
   published=objects.map(o=>({...o}));
+  ktPublishedEventId=ktSelectedEventId;
   alert('Denah berhasil dipublish online. Tamu akan melihatnya saat membuka atau refresh halaman.');
  }
 }
