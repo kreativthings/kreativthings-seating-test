@@ -1873,6 +1873,7 @@ function ktRobinShowRoute(table){
  const name=String(table||'').trim().toUpperCase();if(!ktRobinHasTable(name))return false;
  const [x,y]=KT_ROBIN_POSITIONS[name];
  const box=document.getElementById('guestmapbox');box.classList.remove('hidden');
+ box.classList.add('kt-robin-fit');
  const svg=document.getElementById('viewmap');svg.style.display='none';
  let host=document.getElementById('ktRobinMapHost');if(!host){host=document.createElement('div');host.id='ktRobinMapHost';box.querySelector('.guest-map-scroll').append(host);}
  host.replaceChildren();
@@ -1902,8 +1903,57 @@ function ktRobinShowRoute(table){
 const ktOriginalShowGuestRoute=showGuestRoute;
 showGuestRoute=function(table){
  if(ktRobinShowRoute(table))return;
+ document.getElementById('guestmapbox').classList.remove('kt-robin-fit');
  const host=document.getElementById('ktRobinMapHost');if(host)host.remove();
  document.getElementById('viewmap').style.display='';
  return ktOriginalShowGuestRoute(table);
 };
+</script>
+
+<style>
+/* Robin & Dira: show the entire seating route at once on a phone. */
+#guestmapbox.kt-robin-fit .guest-map-scroll{overflow:visible;touch-action:auto;max-width:100%;}
+#guestmapbox.kt-robin-fit #ktRobinMapHost{width:100%;max-width:100%;margin:0 auto;}
+#guestmapbox.kt-robin-fit #ktRobinMapHost svg{width:100%!important;min-width:0!important;max-width:100%;height:auto;display:block;}
+#guestmapbox.kt-robin-fit .guest-map-title + p{display:none;}
+#guestmapbox.kt-robin-fit .guest-map-scroll{padding:6px;}
+</style>
+
+<style>
+/* Fit to screen by default; optional deliberate zoom with horizontal scrolling. */
+#guestmapbox.kt-robin-fit .guest-map-scroll{overflow-x:auto;overflow-y:auto;max-width:100%;touch-action:pan-x pan-y;}
+#guestmapbox.kt-robin-fit #ktRobinMapHost{width:100%;max-width:none;}
+#guestmapbox.kt-robin-fit #ktRobinMapHost svg{width:100%!important;min-width:0!important;max-width:none!important;height:auto;}
+#ktRobinZoomControls{display:flex;gap:6px;justify-content:center;flex-wrap:wrap;margin:10px 0 12px;}
+#ktRobinZoomControls button{padding:9px 11px;font-size:13px;}
+</style>
+<script>
+(function(){
+ let scale=1;
+ const controls=document.createElement('div');controls.id='ktRobinZoomControls';controls.className='hidden';
+ controls.innerHTML='<button type="button" data-zoom="plus">＋ Perbesar</button><button type="button" data-zoom="minus">－ Perkecil</button><button type="button" data-zoom="reset">Ukuran Awal</button>';
+ const box=document.getElementById('guestmapbox');
+ box.querySelector('.guest-map-scroll').before(controls);
+ function apply(){
+  const host=document.getElementById('ktRobinMapHost');if(!host)return;
+  host.style.width=(scale*100)+'%';
+  host.style.maxWidth='none';
+  const svg=host.querySelector('svg');if(svg){svg.style.width='100%';svg.style.maxWidth='none';}
+ }
+ controls.addEventListener('click',function(e){
+  const btn=e.target.closest('button[data-zoom]');if(!btn)return;
+  const kind=btn.dataset.zoom;
+  scale=kind==='reset'?1:Math.max(1,Math.min(3,scale*(kind==='plus'?1.5:1/1.5)));
+  apply();
+ });
+ const original=window.showGuestRoute;
+ window.showGuestRoute=function(table){
+  scale=1;
+  const result=original(table);
+  const robin=box.classList.contains('kt-robin-fit');
+  controls.classList.toggle('hidden',!robin);
+  if(robin){apply();const scroll=box.querySelector('.guest-map-scroll');scroll.scrollLeft=0;scroll.scrollTop=0;}
+  return result;
+ };
+})();
 </script>
