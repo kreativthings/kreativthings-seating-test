@@ -489,8 +489,11 @@ async function sbStaff(path,opts={}){
 async function loadStaffGuests(){
  if(!ktAdminRole&&!ktStaffEventReady)throw Error('Wedding Staff belum terverifikasi.');
  ktRequireEvent();
- staffGuests=await sbStaff('wedding_guests?select=id,guest_name,category,pax,table_number,section,checked_in,arrived_pax,arrived_children&order=guest_name.asc&limit=1000');
+ const allGuests=await sbStaff('wedding_guests?select=id,guest_name,category,pax,table_number,section,checked_in,arrived_pax,arrived_children,deleted_at&order=guest_name.asc&limit=1000');
+ staffGuests=allGuests.filter(g=>g.deleted_at==null);
+ ktManagerDeletedGuests=ktManagerRole?allGuests.filter(g=>g.deleted_at!=null):[];
  renderLiveStaff();
+ if(typeof ktRenderManagerTools==='function')ktRenderManagerTools();
 }
 function renderLiveStaff(){
  let q=document.getElementById('staffquery').value.trim().toLowerCase();
@@ -1724,4 +1727,134 @@ body:not(.kt-screen-admin) #eventSettings{display:none!important}
   eventPanel.appendChild(launch);
  }
 })();
+</script>
+
+<!-- Manager-only guest editing; permissions are enforced by Supabase RLS and trigger. -->
+<script>
+let ktManagerRole=false;
+let ktManagerDeletedGuests=[];
+const ktOriginalRoleCheck=ktGetAdminRole;
+ktGetAdminRole=async function(token){
+ const r=await fetch(SB_URL+'/auth/v1/user',{headers:{apikey:SB_KEY,Authorization:'Bearer '+token},cache:'no-store'});
+ if(!r.ok)throw Error('Gagal memverifikasi peran akun.');
+ const user=await r.json();
+ ktManagerRole=user.app_metadata?.smart_seating_role==='manager';
+ return user.app_metadata?.smart_seating_role==='admin';
+};
+const ktOriginalLiveRender=renderLiveStaff;
+renderLiveStaff=function(){
+ ktOriginalLiveRender();
+ if(!staffToken||!ktManagerRole||!ktStaffEventReady)return;
+ const root=document.getElementById('staffrows');
+ for(const card of root.querySelectorAll('.result')){
+  const title=card.querySelector('b');if(!title)continue;
+  const name=title.textContent;
+  const q=document.getElementById('staffquery').value.trim().toLowerCase();
+  const candidates=staffGuests.filter(g=>String(g.guest_name||'').toLowerCase().includes(q)||String(g.table_number||'').toLowerCase().includes(q));
+  const idx=[...root.querySelectorAll('.result')].indexOf(card);
+  const guest=candidates[idx];if(!guest)continue;
+  const edit=document.createElement('button');edit.type='button';edit.textContent='✎ Edit Data Tamu';
+  edit.style.cssText='width:100%;margin-top:9px;border-color:#9c8063';
+  edit.onclick=()=>ktOpenManagerEditor(guest.id,card,edit);
+  card.append(edit);
+ }
+};
+function ktOpenManagerEditor(id,card,button){
+ if(!ktManagerRole||!ktStaffEventReady)return;
+ const g=staffGuests.find(x=>String(x.id)===String(id));if(!g)return;
+ const previous=card.querySelector('.kt-manager-editor');if(previous){previous.remove();return;}
+ const box=document.createElement('div');box.className='kt-manager-editor';
+ box.style.cssText='width:100%;padding:15px;border:1px solid #d8c8b6;border-radius:10px;background:#faf7f2;margin-top:10px';
+ const title=document.createElement('strong');title.textContent='Edit Undangan • '+g.guest_name;box.append(title);
+ const fields={};
+ for(const [key,label,type] of [['guest_name','Nama undangan','text'],['category','Kategori','text'],['pax','Jumlah pax','number'],['table_number','Nomor meja','text'],['section','Section (internal)','text']]){
+  const lab=document.createElement('label');lab.textContent=label;
+  const input=document.createElement('input');input.type=type;input.value=g[key]??'';
+  if(key==='pax'){input.min='1';input.step='1';}
+  fields[key]=input;box.append(lab,input);
+ }
+ const status=document.createElement('p');status.setAttribute('role','status');status.className='muted';
+ const save=document.createElement('button');save.type='button';save.className='primary';save.textContent='Simpan Perubahan';
+ const cancel=document.createElement('button');cancel.type='button';cancel.textContent='Batal';cancel.style.marginLeft='8px';cancel.onclick=()=>box.remove();
+ save.onclick=async()=>{
+  if(!staffToken||!ktManagerRole||!ktStaffEventReady){status.textContent='Sesi Manager tidak aktif.';return;}
+  const name=fields.guest_name.value.trim(),pax=Number(fields.pax.value);
+  if(!name||!Number.isInteger(pax)||pax<1||pax>999){status.textContent='Nama wajib diisi dan pax harus 1–999.';return;}
+  const payload={guest_name:name,category:fields.category.value.trim(),pax,table_number:fields.table_number.value.trim(),section:fields.section.value.trim()};
+  if(!confirm('Simpan perubahan undangan '+g.guest_name+' untuk wedding aktif?'))return;
+  save.disabled=true;status.textContent='Menyimpan ke Supabase…';
+  try{
+   const rows=await sbStaff('wedding_guests?id=eq.'+encodeURIComponent(g.id),{method:'PATCH',headers:{'Content-Type':'application/json',Prefer:'return=representation'},body:JSON.stringify(payload)});
+   if(!Array.isArray(rows)||rows.length!==1)throw Error('Perubahan belum dikonfirmasi database.');
+   await loadStaffGuests();
+   alert('Data tamu berhasil diperbarui.');
+  }catch(e){status.textContent='Gagal menyimpan: '+e.message;save.disabled=false;}
+ };
+ box.append(save,cancel,status);card.append(box);
+}
+// Manager-only guest creation, soft deletion, and restoration.
+function ktRenderManagerTools(){
+ let panel=document.getElementById('ktManagerTools');
+ if(!panel){panel=document.createElement('section');panel.id='ktManagerTools';panel.className='notice';panel.style.margin='14px 0';document.getElementById('staffrows').before(panel);}
+ panel.replaceChildren();panel.hidden=!ktManagerRole||!ktStaffEventReady||!staffToken;
+ if(panel.hidden)return;
+ const heading=document.createElement('strong');heading.textContent='Kelola Tamu — Manager';panel.append(heading);
+ const actions=document.createElement('div');actions.className='toolbar';actions.style.marginTop='12px';
+ const add=document.createElement('button');add.type='button';add.className='primary';add.textContent='+ Tambah Tamu';
+ const deleted=document.createElement('button');deleted.type='button';deleted.textContent='Tamu Dihapus ('+ktManagerDeletedGuests.length+')';
+ actions.append(add,deleted);panel.append(actions);
+ const content=document.createElement('div');panel.append(content);
+ add.onclick=()=>{
+  content.replaceChildren();const form=document.createElement('form');
+  const fields={};
+  for(const [key,label,type,defaultValue] of [['guest_name','Nama undangan *','text',''],['category','Kategori','text',''],['pax','Jumlah pax *','number','2'],['table_number','Nomor meja','text',''],['section','Section (internal)','text','']]){
+   const l=document.createElement('label');l.textContent=label;const input=document.createElement('input');input.type=type;input.value=defaultValue;if(key==='pax'){input.min='1';input.max='999';input.step='1';}fields[key]=input;form.append(l,input);
+  }
+  const status=document.createElement('p');status.setAttribute('role','status');
+  const save=document.createElement('button');save.type='submit';save.className='primary';save.textContent='Simpan Tamu Baru';
+  const cancel=document.createElement('button');cancel.type='button';cancel.textContent='Batal';cancel.style.marginLeft='8px';cancel.onclick=()=>content.replaceChildren();
+  form.append(save,cancel,status);content.append(form);
+  form.onsubmit=async e=>{
+   e.preventDefault();if(!ktManagerRole||!staffToken||!ktStaffEventReady)return;
+   const name=fields.guest_name.value.trim(),pax=Number(fields.pax.value);
+   if(!name||!Number.isInteger(pax)||pax<1||pax>999){status.textContent='Nama wajib diisi dan pax 1–999.';return;}
+   if(staffGuests.some(g=>g.guest_name.trim().toLowerCase()===name.toLowerCase())&&!confirm('Nama serupa sudah ada di wedding ini. Tetap tambah?'))return;
+   if(!confirm('Tambah '+name+' ke wedding aktif?'))return;
+   save.disabled=true;status.textContent='Menyimpan…';
+   try{
+    const rows=await sbStaff('wedding_guests',{method:'POST',headers:{'Content-Type':'application/json',Prefer:'return=representation'},body:JSON.stringify({guest_name:name,category:fields.category.value.trim(),pax,table_number:fields.table_number.value.trim(),section:fields.section.value.trim()})});
+    if(!Array.isArray(rows)||rows.length!==1)throw Error('Penambahan belum dikonfirmasi database.');
+    await loadStaffGuests();alert('Tamu berhasil ditambahkan.');
+   }catch(err){status.textContent='Gagal: '+err.message;save.disabled=false;}
+  };
+ };
+ deleted.onclick=()=>{
+  content.replaceChildren();const title=document.createElement('p');title.textContent=ktManagerDeletedGuests.length+' tamu dihapus sementara';content.append(title);
+  for(const g of ktManagerDeletedGuests){
+   const line=document.createElement('div');line.className='result';const name=document.createElement('span');name.textContent=g.guest_name+' • Meja '+(g.table_number||'-');
+   const restore=document.createElement('button');restore.type='button';restore.textContent='Pulihkan';restore.onclick=async()=>{
+    if(!ktManagerRole||!ktStaffEventReady||!confirm('Pulihkan '+g.guest_name+'?'))return;
+    restore.disabled=true;
+    try{const rows=await sbStaff('wedding_guests?id=eq.'+encodeURIComponent(g.id),{method:'PATCH',headers:{'Content-Type':'application/json',Prefer:'return=representation'},body:JSON.stringify({deleted_at:null})});if(!Array.isArray(rows)||rows.length!==1)throw Error('Pemulihan belum dikonfirmasi.');await loadStaffGuests();alert('Tamu dipulihkan.');}
+    catch(err){alert('Gagal: '+err.message);restore.disabled=false;}
+   };line.append(name,restore);content.append(line);
+  }
+ };
+}
+const ktManagerOriginalEditor=ktOpenManagerEditor;
+ktOpenManagerEditor=function(id,card,button){
+ ktManagerOriginalEditor(id,card,button);
+ const box=card.querySelector('.kt-manager-editor');if(!box||box.querySelector('.kt-delete-guest'))return;
+ const g=staffGuests.find(x=>String(x.id)===String(id));if(!g)return;
+ const del=document.createElement('button');del.type='button';del.className='kt-delete-guest';del.textContent='Hapus Sementara';del.style.cssText='margin-left:8px;color:#9d3636;border-color:#c88';
+ del.onclick=async()=>{
+  if(!ktManagerRole||!ktStaffEventReady||!confirm('Hapus sementara '+g.guest_name+'? Data dapat dipulihkan.'))return;
+  del.disabled=true;
+  try{const rows=await sbStaff('wedding_guests?id=eq.'+encodeURIComponent(g.id),{method:'PATCH',headers:{'Content-Type':'application/json',Prefer:'return=representation'},body:JSON.stringify({deleted_at:new Date().toISOString()})});if(!Array.isArray(rows)||rows.length!==1)throw Error('Penghapusan belum dikonfirmasi.');await loadStaffGuests();alert('Tamu disembunyikan. Dapat dipulihkan melalui Tamu Dihapus.');}
+  catch(err){alert('Gagal: '+err.message);del.disabled=false;}
+ };
+ box.append(del);
+};
+const ktManagerOriginalSignOut=staffSignOut;
+staffSignOut=function(){ktManagerRole=false;ktManagerDeletedGuests=[];document.getElementById("ktManagerTools")?.remove();ktManagerOriginalSignOut();};
 </script>
