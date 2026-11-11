@@ -41,7 +41,7 @@
 </div><div id="tableprops"><label>Kapasitas</label><input id="p-capacity" type="number" min="0" onchange="edit('capacity',Number(this.value))"><input type="hidden" id="p-section"><label>Bentuk</label><select id="p-shape" onchange="edit('shape',this.value)"><option value="rect">Kotak</option><option value="long">Persegi panjang</option><option value="round">Bulat</option></select></div><button style="margin-top:14px" onclick="removeSelected()">Hapus objek</button></div><hr><div id="stats" class="muted"></div><label>Cari meja</label><input id="locate" placeholder="1" oninput="selectByNumber(this.value)"><p class="muted" style="font-size:12px">Tambahkan fasilitas bernama Entrance, lalu geser ke pintu masuk yang sebenarnya. Jalur manual harus dibuat untuk setiap meja yang membutuhkan petunjuk arah.</p></aside></div>
 <div id="guests" class="panel hidden"><h2>Guest Assignment</h2><p class="muted">Mode lama untuk data lokal. Gunakan Daftar Tamu Online pada Dashboard Admin untuk data wedding.</p><div class="two"><div><label>Nama tamu</label><input id="newname" placeholder="Nama undangan"></div><div><label>Nomor meja (opsional)</label><input id="newtable" placeholder="55A"></div><div><label>Jumlah pax (opsional)</label><input id="newpax" type="number" min="1" value="2"></div></div><div class="toolbar" style="margin-top:13px"><button class="primary" onclick="addGuest()">Tambah Tamu</button><button onclick="document.getElementById('csvfile').click()">Import CSV</button><input hidden id="csvfile" type="file" accept=".csv,text/csv" onchange="importCSV(event)"><button onclick="downloadCSV()">Export CSV</button></div><div id="guestrows"></div></div>
 <div id="staff" class="panel hidden"><h2>Staff Registration • Supabase</h2><div id="ktStaffEventBanner" class="notice" role="status" style="border:1px solid #d9c7b2"><strong>Wedding aktif: belum diverifikasi</strong><div>Menunggu konfirmasi penugasan dari Supabase.</div></div><div class="metrics"><div class="metric"><small>Undangan check-in</small><strong id="checked">0</strong></div><div class="metric"><small>Pax hadir aktual</small><strong id="arrived">0</strong></div></div><label>Cari nama atau nomor meja</label><input id="staffquery" placeholder="Ketik nama / meja" oninput="renderStaff()"><div id="staffrows"></div><div class="notice">Data check-in staf tersimpan di Supabase setelah login.</div></div>
-<div id="guest" class="panel hidden guest-shell"><div class="guest-top"><div class="guest-brand">KREATIVTHINGS <span>SMART SEATING</span></div><div class="guest-ornament">✦</div><h2 id="eventWelcomeTitle">Welcome to Our Engagement</h2><div id="eventCoupleNames" class="event-couple-names"></div><p>Find your seat with ease</p></div><div class="guest-inner"><div class="guest-search-card"><label for="guestquery">CARI NAMA UNDANGAN</label><div class="guest-search-row"><input id="guestquery" type="search" autocomplete="off" placeholder="Nama depan atau belakang..." oninput="renderGuest()" onkeydown="if(event.key==='Enter')searchPublicGuest()"><button type="button" onclick="document.getElementById('guestquery').value='';renderGuest();document.getElementById('guestquery').focus()" aria-label="Hapus pencarian">✕</button></div><p class="guest-hint">Cukup ketik nama depan atau nama belakang (minimal 3 huruf), lalu tekan Cari Nama.</p><button type="button" class="guest-route-button" onclick="searchPublicGuest()">Cari Nama</button></div><div id="guestresult" aria-live="polite"></div><div id="guestmapbox" class="hidden"><div class="guest-map-title">Petunjuk arah dari Entrance</div><p style="font-size:12px;text-align:center;color:#806044">← Geser denah ke kiri atau kanan →</p><div class="guest-map-scroll"><svg id="viewmap" viewBox="0 0 1000 750"></svg></div><button class="guest-back" onclick="document.getElementById('guestmapbox').classList.add('hidden');document.getElementById('guestquery').focus()">← Kembali ke hasil pencarian</button></div><p class="guest-footer">Need assistance? Please ask our Kreativthings crew.</p></div></div></div>
+<div id="guest" class="panel hidden guest-shell"><div class="guest-top"><div class="guest-brand">KREATIVTHINGS <span>SMART SEATING</span></div><div class="guest-ornament">✦</div><h2 id="eventWelcomeTitle">Welcome to Our Engagement</h2><div id="eventCoupleNames" class="event-couple-names"></div><p>Find your seat with ease</p></div><div class="guest-inner"><div class="guest-search-card"><label for="guestquery">CARI NAMA UNDANGAN</label><div class="guest-search-row"><input id="guestquery" type="search" autocomplete="off" placeholder="Nama depan atau belakang..." oninput="renderGuest()" onkeydown="if(event.key==='Enter')searchPublicGuest()"><button type="button" onclick="ktClearGuestSearch()" aria-label="Hapus pencarian">✕</button></div><p class="guest-hint">Cukup ketik nama depan atau nama belakang (minimal 3 huruf), lalu tekan Cari Nama.</p><button type="button" class="guest-route-button" onclick="searchPublicGuest()">Cari Nama</button></div><div id="guestresult" aria-live="polite"></div><div id="guestmapbox" class="hidden"><div class="guest-map-title">Petunjuk arah dari Entrance</div><p style="font-size:12px;text-align:center;color:#806044">← Geser denah ke kiri atau kanan →</p><div class="guest-map-scroll"><svg id="viewmap" viewBox="0 0 1000 750"></svg></div><button class="guest-back" onclick="document.getElementById('guestmapbox').classList.add('hidden');document.getElementById('guestquery').focus()">← Kembali ke hasil pencarian</button></div><p class="guest-footer">Need assistance? Please ask our Kreativthings crew.</p></div></div></div>
 <script>
 // === PENGATURAN ACARA KREATIVTHINGS ===
 // Untuk klien berikutnya, cukup ubah dua tulisan di bawah ini.
@@ -603,6 +603,18 @@ const staffGuide=document.createElement('p');staffGuide.className='muted';staffG
 // Public RPC test: read-only name/table lookup. Public endpoint still needs
 // rate limiting / abuse protection before production deployment.
 let publicMatches=[];
+let ktGuestSearchGeneration=0;
+function ktClearGuestSearch(){
+ ktGuestSearchGeneration++;
+ publicMatches=[];
+ const input=document.getElementById('guestquery');
+ input.value='';
+ document.getElementById('guestresult').replaceChildren();
+ document.getElementById('guestmapbox').classList.add('hidden');
+ window.ktActiveGuestTable=null;
+ input.focus();
+}
+
 const staffGuestRenderer=renderGuest;
 renderGuest=function(){
  if(staffToken)return staffGuestRenderer();
@@ -611,6 +623,7 @@ renderGuest=function(){
  document.getElementById('guestresult').innerHTML='';
 };
 async function searchPublicGuest(){
+ const generation=++ktGuestSearchGeneration;
  if(staffToken){staffGuestRenderer();return;}
  const outGuard=document.getElementById('guestresult');if(!ktPublicEventId()){outGuard.textContent='Link wedding belum lengkap. Hubungi Kreativthings untuk QR yang benar.';return;}
  const q=document.getElementById('guestquery').value.trim();
@@ -624,7 +637,7 @@ async function searchPublicGuest(){
    body:JSON.stringify({name:q,event_id:requestedEventId})
   });
   const payload=await r.json();
-  if(requestedEventId!==ktPublicEventId()||q!==document.getElementById('guestquery').value.trim())return;
+  if(generation!==ktGuestSearchGeneration||requestedEventId!==ktPublicEventId()||q!==document.getElementById('guestquery').value.trim())return;
   if(!r.ok)throw Error(payload.error||'Pencarian belum tersedia ('+r.status+').');
   if(!Array.isArray(payload.results))throw Error('Format hasil pencarian tidak valid.');
   publicMatches=payload.results;
@@ -636,10 +649,11 @@ async function searchPublicGuest(){
    const btn=document.createElement('button');btn.textContent='Lihat meja';btn.onclick=()=>showPublicTable(i);
    item.append(name,btn);out.append(item);
   });
- }catch(e){out.textContent='Gagal mencari nama: '+e.message;}
+ }catch(e){if(generation===ktGuestSearchGeneration)out.textContent='Gagal mencari nama: '+e.message;}
 }
 async function showPublicTable(i){
  const g=publicMatches[i];if(!g)return;
+ const generation=ktGuestSearchGeneration;
  const table=String(g.table_number||'').trim();
  const eventId=ktPublicEventId();
  const out=document.getElementById('guestresult');
@@ -649,7 +663,7 @@ async function showPublicTable(i){
  if(!t){
   out.innerHTML='<div class="notice">Memeriksa denah wedding…</div>';
   await ktLoadPublishedLayout();
-  if(eventId!==ktPublicEventId())return;
+  if(generation!==ktGuestSearchGeneration||eventId!==ktPublicEventId())return;
   t=published.find(o=>o.kind==='table'&&String(o.id).trim().toLowerCase()===table.toLowerCase());
  }
  if(!t){out.innerHTML='<div class="notice">Meja '+esc(table)+' belum ditemukan pada denah wedding yang dipublikasikan. Minta Admin memeriksa denah event ini.</div>';return;}
