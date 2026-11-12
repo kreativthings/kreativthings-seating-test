@@ -507,7 +507,7 @@ async function sbStaff(path,opts={}){
 async function loadStaffGuests(){
  if(!ktAdminRole&&!ktStaffEventReady)throw Error('Wedding Staff belum terverifikasi.');
  ktRequireEvent();
- const allGuests=await sbStaff('wedding_guests?select=id,guest_name,category,pax,table_number,section,checked_in,arrived_pax,arrived_children,deleted_at&order=guest_name.asc&limit=1000');
+ const allGuests=await sbStaff('wedding_guests?select=id,guest_name,category,pax,table_number,section,checked_in,arrived_pax,arrived_children,deleted_at,special_requirements&order=guest_name.asc&limit=1000');
  staffGuests=allGuests.filter(g=>g.deleted_at==null);
  ktManagerDeletedGuests=ktManagerRole?allGuests.filter(g=>g.deleted_at!=null):[];
  renderLiveStaff();
@@ -526,7 +526,7 @@ function renderLiveStaff(){
   const wrap=document.createElement('div');wrap.className='result';wrap.style.flexWrap='wrap';
   const info=document.createElement('div');info.style.flex='1 1 180px';
   const title=document.createElement('b');title.textContent=g.guest_name;info.append(title,document.createElement('br'));
-  const detail=document.createElement('small');detail.textContent=(g.category||'')+' • Meja '+(g.table_number||'-')+' • Undangan '+(Number(g.pax)||0)+' pax • '+(g.checked_in?'✓ Hadir ('+(Number(g.arrived_pax)||0)+' orang, '+(Number(g.arrived_children)||0)+' anak)':'Belum check-in');info.append(detail);
+  const detail=document.createElement('small');detail.textContent=(g.category||'')+' • Meja '+(g.table_number||'-')+' • Undangan '+(Number(g.pax)||0)+' pax • '+(g.checked_in?'✓ Hadir ('+(Number(g.arrived_pax)||0)+' orang, '+(Number(g.arrived_children)||0)+' anak)':'Belum check-in');info.append(detail);const specialText=ktSpecialSummary(g.special_requirements);if(specialText){const note=document.createElement('div');note.className='kt-special-staff';note.textContent='📋 Special Requirement: '+specialText;info.append(note);}
   const controls=document.createElement('div');controls.style.cssText='display:flex;align-items:end;gap:7px;flex-wrap:wrap';
   const counter=(labelText,value,min,max)=>{
    const field=document.createElement('div');field.style.cssText='display:flex;flex-direction:column;gap:4px';
@@ -780,7 +780,7 @@ body.kt-admin-layout #staffPortal{display:none!important}
  </div>
  </div>
  <div id="adminGuestManager" class="hidden"><label for="adminSearch">Cari nama atau meja</label><input id="adminSearch" placeholder="Cari tamu..." oninput="adminRenderGuests()"><div id="adminGuestRows"></div><p class="notice">Perubahan nama, meja, dan pax akan disimpan ke Supabase hanya bila izin database Admin mengizinkan. Tombol check-in tetap tersedia di Staff Registration.</p></div>
- <div id="adminGuestEditor" class="admin-editor hidden"><h2>Edit Undangan</h2><label>Nama undangan</label><input id="adminEditName"><label>Meja</label><input id="adminEditTable"><label>Pax</label><input id="adminEditPax" type="number" min="1"><div class="admin-actions"><button class="primary" onclick="adminSaveGuest()">Simpan Online</button><button onclick="adminCloseEditor()">Batal</button><button type="button" onclick="adminDeleteGuest()" style="color:#a12d2d;border-color:#c98f8f">Hapus Tamu</button></div><p id="adminEditStatus" role="status"></p></div>
+ <div id="ktCateringSummary" class="notice"><button type="button" onclick="ktRenderCateringSummary()">📋 Rekap Catering</button><div id="ktCateringRows" class="muted">Klik untuk melihat rekap kebutuhan wedding aktif.</div></div><div id="adminGuestEditor" class="admin-editor hidden"><h2>Edit Undangan</h2><label>Nama undangan</label><input id="adminEditName"><label>Meja</label><input id="adminEditTable"><label>Pax</label><input id="adminEditPax" type="number" min="1"><div id="ktAdminSpecialMount"></div><div class="admin-actions"><button class="primary" onclick="adminSaveGuest()">Simpan Online</button><button onclick="adminCloseEditor()">Batal</button><button type="button" onclick="adminDeleteGuest()" style="color:#a12d2d;border-color:#c98f8f">Hapus Tamu</button></div><p id="adminEditStatus" role="status"></p></div>
  <div class="admin-editor" id="adminDeleteAllPanel" style="border-color:#d6a1a1">
   <h3 style="margin-top:0;color:#a12d2d">Kosongkan Daftar Tamu Online</h3>
   <p class="muted">Hanya menghapus data di <b>wedding_guests</b>, termasuk jumlah hadir dan check-in. Denah, pengaturan acara, dan akun login tidak dihapus. Backup data terlebih dahulu.</p>
@@ -981,6 +981,7 @@ function adminEditGuest(id){
  document.getElementById('adminEditTable').value=g.table_number||'';
  document.getElementById('adminEditPax').value=g.pax??'';
  document.getElementById('adminEditStatus').textContent='';
+ ktMountSpecial('ktAdminSpecialMount',g.special_requirements);
  document.getElementById('adminGuestEditor').classList.remove('hidden');
  document.getElementById('adminGuestEditor').scrollIntoView({behavior:'smooth'});
 }
@@ -995,7 +996,7 @@ async function adminSaveGuest(){
  if(!confirm('Simpan perubahan data undangan ini ke Supabase?'))return;
  status.textContent='Menyimpan…';
  try{
-  await sbStaff('wedding_guests?id=eq.'+encodeURIComponent(ktEditingGuestId),{method:'PATCH',headers:{'Content-Type':'application/json',Prefer:'return=representation'},body:JSON.stringify({guest_name:name,table_number:table||null,pax})}).then(rows=>{if(!Array.isArray(rows)||rows.length!==1)throw Error('Tidak ada data diperbarui. Periksa izin RLS Admin.');});
+  await sbStaff('wedding_guests?id=eq.'+encodeURIComponent(ktEditingGuestId),{method:'PATCH',headers:{'Content-Type':'application/json',Prefer:'return=representation'},body:JSON.stringify({guest_name:name,table_number:table||null,pax,special_requirements:ktReadSpecial('ktAdminSpecialMount')})}).then(rows=>{if(!Array.isArray(rows)||rows.length!==1)throw Error('Tidak ada data diperbarui. Periksa izin RLS Admin.');});
   await loadStaffGuests();adminRenderSummary();adminRenderGuests();adminCloseEditor();
   document.getElementById('adminDashboardStatus').textContent='Perubahan tamu berhasil disimpan online.';
  }catch(e){status.textContent='Gagal menyimpan: '+e.message;}
@@ -1818,6 +1819,7 @@ function ktOpenManagerEditor(id,card,button){
   if(key==='pax'){input.min='1';input.step='1';}
   fields[key]=input;box.append(lab,input);
  }
+ const specialMount=document.createElement('div');specialMount.id='ktManagerSpecialMount';box.append(specialMount);ktMountSpecial('ktManagerSpecialMount',g.special_requirements);
  const status=document.createElement('p');status.setAttribute('role','status');status.className='muted';
  const save=document.createElement('button');save.type='button';save.className='primary';save.textContent='Simpan Perubahan';
  const cancel=document.createElement('button');cancel.type='button';cancel.textContent='Batal';cancel.style.marginLeft='8px';cancel.onclick=()=>box.remove();
@@ -1825,7 +1827,7 @@ function ktOpenManagerEditor(id,card,button){
   if(!staffToken||!ktManagerRole||!ktStaffEventReady){status.textContent='Sesi Manager tidak aktif.';return;}
   const name=fields.guest_name.value.trim(),pax=Number(fields.pax.value);
   if(!name||!Number.isInteger(pax)||pax<1||pax>999){status.textContent='Nama wajib diisi dan pax harus 1–999.';return;}
-  const payload={guest_name:name,category:fields.category.value.trim(),pax,table_number:fields.table_number.value.trim(),section:fields.section.value.trim()};
+  const payload={guest_name:name,category:fields.category.value.trim(),pax,table_number:fields.table_number.value.trim(),section:fields.section.value.trim(),special_requirements:ktReadSpecial('ktManagerSpecialMount')};
   if(!confirm('Simpan perubahan undangan '+g.guest_name+' untuk wedding aktif?'))return;
   save.disabled=true;status.textContent='Menyimpan ke Supabase…';
   try{
@@ -1902,4 +1904,61 @@ ktOpenManagerEditor=function(id,card,button){
 };
 const ktManagerOriginalSignOut=staffSignOut;
 staffSignOut=function(){ktManagerRole=false;ktManagerDeletedGuests=[];document.getElementById("ktManagerTools")?.remove();ktManagerOriginalSignOut();};
+</script>
+<style>
+.kt-special-details{margin:13px 0;border:1px solid #decfbe;border-radius:10px;padding:12px;background:#fcfaf7}
+.kt-special-details summary{cursor:pointer;font-weight:700;list-style-position:inside}
+.kt-special-line{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:10px 0}
+.kt-special-line label{display:flex;align-items:center;gap:8px;margin:0;font-size:14px}
+.kt-special-line input[type=checkbox]{width:auto}
+.kt-special-line input[type=number]{width:80px}
+.kt-special-staff{font-size:12px;margin-top:7px;padding:7px;border-radius:7px;background:#f5eee4;color:#604a35}
+.kt-special-notes{width:100%;min-height:65px;border:1px solid #d8cbbb;border-radius:8px;padding:9px;font:inherit}
+</style><script>
+// Guest special requirements: per-guest JSONB. Only authenticated staff list loads this field.
+const KT_SPECIAL_ITEMS=[['baby_chair','Baby Chair'],['kids_meal','Kids Meal'],['halal','Halal Food'],['vegetarian','Vegetarian'],['vegan','Vegan'],['no_beef','No Beef'],['allergy_seafood','Alergi Seafood']];
+function ktSpecialObject(v){return v&&typeof v==='object'&&!Array.isArray(v)?v:{};}
+function ktMountSpecial(id,data){
+ const root=document.getElementById(id);if(!root)return;
+ const values=ktSpecialObject(data);root.replaceChildren();
+ const details=document.createElement('details');details.className='kt-special-details';
+ const summary=document.createElement('summary');summary.textContent='Special Requirement (klik untuk membuka)';details.append(summary);
+ for(const [key,label] of KT_SPECIAL_ITEMS){
+  const row=document.createElement('div');row.className='kt-special-line';
+  const lab=document.createElement('label'),check=document.createElement('input');check.type='checkbox';check.dataset.ktKey=key;
+  const num=document.createElement('input');num.type='number';num.min='1';num.max='999';num.step='1';num.value=String(Math.max(1,Number(values[key])||1));num.dataset.ktQty=key;
+  check.checked=Number(values[key])>0;num.disabled=!check.checked;check.onchange=()=>{num.disabled=!check.checked};
+  lab.append(check,document.createTextNode(label));row.append(lab,num);details.append(row);
+ }
+ const lab=document.createElement('label');lab.textContent='Catatan lainnya';
+ const note=document.createElement('textarea');note.className='kt-special-notes';note.dataset.ktNotes='1';note.value=String(values.notes||'');
+ details.append(lab,note);root.append(details);
+}
+function ktReadSpecial(id){
+ const root=document.getElementById(id),out={};if(!root)return out;
+ for(const check of root.querySelectorAll('[data-kt-key]')){
+  if(!check.checked)continue;
+  const input=[...root.querySelectorAll('[data-kt-qty]')].find(el=>el.dataset.ktQty===check.dataset.ktKey);
+  const count=Number(input?.value);
+  if(!Number.isInteger(count)||count<1||count>999)throw Error('Jumlah '+check.dataset.ktKey+' harus 1–999.');
+  out[check.dataset.ktKey]=count;
+ }
+ const note=root.querySelector('[data-kt-notes]')?.value.trim();if(note)out.notes=note;
+ return out;
+}
+function ktSpecialSummary(v){
+ const obj=ktSpecialObject(v);const parts=KT_SPECIAL_ITEMS.filter(([key])=>Number(obj[key])>0).map(([key,label])=>label+' ×'+obj[key]);
+ if(obj.notes)parts.push('Catatan: '+String(obj.notes));return parts.join(' • ');
+}
+function ktRenderCateringSummary(){
+ const el=document.getElementById('ktCateringRows');if(!el)return;
+ if(!staffToken||!ktAdminRole||!ktIsUUID(ktSelectedEventId)){el.textContent='Pilih wedding dan login Admin dahulu.';return;}
+ const totals={};for(const [key] of KT_SPECIAL_ITEMS)totals[key]=0;
+ for(const g of staffGuests){const obj=ktSpecialObject(g.special_requirements);for(const [key] of KT_SPECIAL_ITEMS)totals[key]+=Math.max(0,Number(obj[key])||0);}
+ el.replaceChildren();const heading=document.createElement('p');heading.textContent='Rekap wedding aktif ('+staffGuests.length+' undangan dimuat)';el.append(heading);
+ for(const [key,label] of KT_SPECIAL_ITEMS){const row=document.createElement('div');row.textContent=label+': '+totals[key];el.append(row);}
+ const noteCount=staffGuests.filter(g=>ktSpecialObject(g.special_requirements).notes).length;
+ const note=document.createElement('p');note.textContent='Undangan dengan catatan tambahan: '+noteCount;el.append(note);
+ const caution=document.createElement('small');caution.textContent='Rekap berdasarkan data tamu yang telah dimuat. Periksa kelengkapan daftar sebelum digunakan catering.';el.append(caution);
+}
 </script>
