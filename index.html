@@ -1978,3 +1978,38 @@ function ktRenderCateringSummary(){
  const caution=document.createElement('small');caution.textContent='Rekap berdasarkan data tamu yang telah dimuat. Periksa kelengkapan daftar sebelum digunakan catering.';el.append(caution);
 }
 </script>
+<!-- MAIN root: dedicated administrator entry. Event-specific guest pages remain unchanged. -->
+<style>
+body.kt-root-admin-entry:not(.kt-authenticated) #guest,
+body.kt-root-admin-entry:not(.kt-authenticated) #staffPortal,
+body.kt-root-admin-entry:not(.kt-authenticated) #ktScreenNav,
+body.kt-root-admin-entry:not(.kt-authenticated) #staff,
+body.kt-root-admin-entry:not(.kt-authenticated) #adminDashboard{display:none!important}
+body.kt-root-admin-entry:not(.kt-authenticated) #staffLogin{display:block!important;max-width:580px;margin:30px auto;padding:28px 24px}
+body.kt-root-admin-entry:not(.kt-authenticated) #staffLogin h2{font-size:24px;margin-bottom:12px}
+#ktRootAdminBrand{display:none}
+body.kt-root-admin-entry:not(.kt-authenticated) #ktRootAdminBrand{display:block;max-width:580px;margin:35px auto 0;text-align:center;padding:26px 16px 6px;color:#5c4535}
+#ktRootAdminBrand .kt-root-name{font-family:Georgia,serif;font-size:25px;letter-spacing:5px}
+#ktRootAdminBrand .kt-root-sub{letter-spacing:3px;font-size:12px;margin-top:8px}
+#ktRootAdminBrand .kt-root-title{font-family:Georgia,serif;font-size:30px;margin-top:26px}
+body.kt-root-admin-entry:not(.kt-authenticated) #staffLogin .kt-root-staff-note{display:none}
+@media(max-width:600px){body.kt-root-admin-entry:not(.kt-authenticated) #staffLogin{margin:15px 16px;padding:24px 20px}#ktRootAdminBrand .kt-root-title{font-size:25px}}
+</style>
+<div id="ktRootAdminBrand"><div class="kt-root-name">KREATIVTHINGS</div><div class="kt-root-sub">SMART SEATING</div><div class="kt-root-title">Event Management Dashboard</div></div>
+<script>
+(function(){
+ const isRoot=!new URLSearchParams(location.search).has('event');
+ if(!isRoot)return;
+ document.body.classList.add('kt-root-admin-entry');
+ const login=document.getElementById('staffLogin');
+ const heading=login.querySelector('h2');if(heading)heading.textContent='Admin Login';
+ const description=login.querySelector('p.muted');if(description)description.textContent='Masuk menggunakan email dan password Admin Kreativthings.';
+ const identity=login.querySelector('label');if(identity)identity.textContent='Email Admin';
+ const field=document.getElementById('staffEmail');if(field){field.placeholder='Email Admin';field.setAttribute('inputmode','email');}
+ login.classList.remove('hidden');
+ // Retain the existing authentication, roles, and dashboard. No changes to Supabase.
+ const originalSignOut=window.staffSignOut;
+ window.staffSignOut=function(){originalSignOut.apply(this,arguments);login.classList.remove('hidden');};
+ // Existing session restoration continues to use the existing authenticated screens.
+})();
+</script>
