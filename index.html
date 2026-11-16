@@ -2013,3 +2013,61 @@ body.kt-root-admin-entry:not(.kt-authenticated) #staffLogin .kt-root-staff-note{
  // Existing session restoration continues to use the existing authenticated screens.
 })();
 </script>
+
+<!-- Admin dashboard navigation: presentation-only; existing Supabase operations remain intact. -->
+<style>
+#ktAdminMenu{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:18px 0}
+.kt-admin-menu-btn{display:flex;flex-direction:column;align-items:flex-start;gap:9px;min-height:105px;text-align:left;padding:17px;border:1px solid #dfd1c1;border-radius:15px;background:#fffaf5;color:#594331;font-weight:650}
+.kt-admin-menu-btn .kt-menu-symbol{font-size:23px}
+.kt-admin-menu-btn[aria-expanded="true"]{background:#806044;color:white;border-color:#806044}
+.kt-admin-menu-btn .kt-menu-arrow{margin-left:auto;font-size:12px}
+.kt-admin-menu-content{margin-top:12px}
+.kt-admin-menu-content.hidden{display:none!important}
+.kt-admin-menu-content>.admin-editor{margin:12px 0}
+#ktAdminMenuHint{color:#887767;font-size:13px;margin:0 0 10px}
+@media(max-width:480px){#ktAdminMenu{gap:9px}.kt-admin-menu-btn{padding:13px;min-height:100px;font-size:13px}}
+</style>
+<script>
+(function(){
+ const dash=document.getElementById('adminDashboard');if(!dash)return;
+ const status=document.getElementById('adminDashboardStatus');
+ const menu=document.createElement('div');menu.id='ktAdminMenu';
+ const hint=document.createElement('p');hint.id='ktAdminMenuHint';hint.textContent='Pilih bagian yang ingin dikelola. Hanya satu bagian terbuka dalam satu waktu.';
+ const specs=[['wedding','▦','Wedding & Staff'],['guests','♧','Daftar Tamu'],['catering','▤','Rekap Catering'],['layout','▧','Denah'],['settings','⚙','Pengaturan Lanjutan']];
+ const contents={};
+ for(const [id,icon,label] of specs){
+  const b=document.createElement('button');b.type='button';b.className='kt-admin-menu-btn';b.dataset.ktMenu=id;b.setAttribute('aria-expanded','false');b.innerHTML='<span class="kt-menu-symbol">'+icon+'</span><span>'+label+'</span><span class="kt-menu-arrow">▼</span>';
+  b.addEventListener('click',()=>window.ktOpenAdminMenu(id));menu.appendChild(b);
+  const section=document.createElement('section');section.id='ktMenuContent-'+id;section.className='kt-admin-menu-content hidden';section.setAttribute('aria-label',label);contents[id]=section;
+ }
+ dash.insertBefore(hint,document.getElementById('ktEventManager'));
+ dash.insertBefore(menu,document.getElementById('ktEventManager'));
+ for(const [id] of specs)dash.insertBefore(contents[id],status);
+ const move=(id,section)=>{const el=document.getElementById(id);if(el)contents[section].appendChild(el)};
+ move('ktEventManager','wedding');move('ktActiveEventPanel','wedding');
+ move('ktGuestQuickPanel','guests');
+ const legacy=document.getElementById('ktLegacyEventData');
+ // Keep the legacy container as a compatibility anchor for existing actions.
+ const children=[...legacy.children];
+ for(const el of children){
+  if(el.id==='ktCateringSummary')contents.catering.appendChild(el);
+  else if(['adminDeleteAllPanel','adminChangeStaffPasswordPanel'].includes(el.id))contents.settings.appendChild(el);
+  else contents.guests.appendChild(el);
+ }
+ // Remove the obsolete "show advanced" toggle; its functions remain for compatibility.
+ const legacyToggle=document.getElementById('ktLegacyToggle');if(legacyToggle&&legacyToggle.parentElement)legacyToggle.parentElement.style.display='none';
+ const layoutDescription=document.createElement('div');layoutDescription.className='admin-editor';
+ layoutDescription.innerHTML='<h2>Editor Denah Wedding</h2><p class="muted">Pilih wedding aktif pada menu Wedding & Staff sebelum membuka editor. Perubahan denah harus disimpan dan dipublikasikan secara online.</p>';
+ const layoutButton=document.createElement('button');layoutButton.type='button';layoutButton.className='primary';layoutButton.textContent='Buka Editor Denah';layoutButton.addEventListener('click',()=>adminOpenLayout());layoutDescription.appendChild(layoutButton);contents.layout.appendChild(layoutDescription);
+ window.ktOpenAdminMenu=function(id){
+  const isOpen=!contents[id].classList.contains('hidden');
+  for(const [key] of specs){contents[key].classList.add('hidden');const b=menu.querySelector('[data-kt-menu="'+key+'"]');b.setAttribute('aria-expanded','false');}
+  if(!isOpen){contents[id].classList.remove('hidden');menu.querySelector('[data-kt-menu="'+id+'"]').setAttribute('aria-expanded','true');if(id==='catering'&&typeof ktRenderCateringSummary==='function')ktRenderCateringSummary();}
+ };
+ // Ensure quick actions and navigation expose their corresponding section.
+ if(typeof window.ktGuestQuickAction==='function'){
+  const original=window.ktGuestQuickAction;window.ktGuestQuickAction=function(action){window.ktOpenAdminMenu('guests');return original.apply(this,arguments)};
+ }
+ // Start with all menu sections closed, keeping the dashboard short on mobile.
+})();
+</script>
