@@ -1209,7 +1209,10 @@ function ktCopyGuestLink(){
   url=new URL('Robin-Dira/index.html',new URL('./',location.href));
   url.searchParams.set('event',id);
  }else{
-  url=new URL(location.href);
+  // Build the public guest URL from the deployment root, not the current
+  // admin URL, so tracking parameters and admin navigation are not copied.
+  url=new URL('./',location.href);
+  url.search='';
   url.searchParams.set('event',id);
  }
  url.hash='';
