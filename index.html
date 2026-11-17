@@ -2074,3 +2074,196 @@ body.kt-root-admin-entry:not(.kt-authenticated) #staffLogin .kt-root-staff-note{
  // Start with all menu sections closed, keeping the dashboard short on mobile.
 })();
 </script>
+
+<!-- Table move and read-only staff map merged from tested prototype. Production wedding-link routing retained above. -->
+<style>
+.kt-move-card{width:100%;padding:12px;border:1px solid #d7c7b7;border-radius:10px;background:#fffaf4;margin:8px 0}.kt-move-card label{margin:8px 0 4px}.kt-move-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}.kt-move-info{font-size:13px;color:#6e5846;margin:8px 0;line-height:1.6}.kt-move-warning{background:#fff0dc;border:1px solid #d8a55e;padding:9px;border-radius:8px}
+</style>
+<!-- Staff read-only map: opened on demand from each guest card. -->
+<style>
+#ktStaffMapOverlay{position:fixed;inset:0;z-index:100000;background:rgba(28,22,17,.75);padding:12px;display:flex;align-items:center;justify-content:center}
+#ktStaffMapOverlay[hidden]{display:none!important}
+#ktStaffMapDialog{background:#fffdf9;border-radius:14px;width:min(100%,1000px);max-height:96dvh;overflow:auto;padding:14px;box-shadow:0 16px 55px #0004}
+#ktStaffMapDialog .kt-map-buttons{display:flex;gap:7px;flex-wrap:wrap;margin:10px 0}
+#ktStaffMapDialog .kt-map-viewport{border:1px solid #d8cbbb;border-radius:9px;overflow:hidden;background:#fcfaf7}
+#ktStaffMapSvg{width:100%;height:auto;display:block;aspect-ratio:4/3;touch-action:pan-x pan-y}
+#ktStaffMapStatus{font-size:13px;color:#765e49;margin:7px 0}
+</style>
+<div id="ktStaffMapOverlay" hidden>
+ <section id="ktStaffMapDialog" role="dialog" aria-modal="true" aria-labelledby="ktStaffMapHeading">
+  <h2 id="ktStaffMapHeading">Lihat Denah</h2>
+  <div id="ktStaffMapStatus" role="status">Memuat denah wedding aktif...</div>
+  <div class="kt-map-buttons">
+   <button type="button" id="ktStaffMapZoomIn">＋ Zoom In</button>
+   <button type="button" id="ktStaffMapZoomOut">－ Zoom Out</button>
+   <button type="button" id="ktStaffMapReset">↺ Reset</button>
+   <button type="button" id="ktStaffMapClose" class="primary">Tutup Denah</button>
+  </div>
+  <div class="kt-map-viewport"><svg id="ktStaffMapSvg" viewBox="0 0 1000 750" aria-label="Denah wedding dan jalur menuju meja"></svg></div>
+ </section>
+</div>
+<script>
+let ktStaffMapRequest=0;
+function ktStaffMapResetView(){document.getElementById('ktStaffMapSvg').setAttribute('viewBox','0 0 1000 750');}
+function ktStaffMapZoom(factor){
+ const svg=document.getElementById('ktStaffMapSvg'),v=svg.viewBox.baseVal;
+ const w=Math.max(180,Math.min(1000,v.width/factor)),h=w*.75;
+ const x=Math.max(0,Math.min(1000-w,v.x+(v.width-w)/2));
+ const y=Math.max(0,Math.min(750-h,v.y+(v.height-h)/2));
+ svg.setAttribute('viewBox',[x,y,w,h].join(' '));
+}
+function ktStaffMapClose(){
+ ++ktStaffMapRequest;
+ document.getElementById('ktStaffMapOverlay').hidden=true;
+}
+async function ktStaffMapOpen(id){
+ if(!staffToken||(!ktStaffEventReady&&!ktAdminRole)){alert('Login Staff dan penugasan wedding harus aktif.');return;}
+ const g=staffGuests.find(x=>String(x.id)===String(id));if(!g)return;
+ const eventId=ktRequireEvent(),table=String(g.table_number||'').trim();
+ if(!table){alert('Nomor meja tamu belum ditentukan.');return;}
+ const request=++ktStaffMapRequest;
+ const overlay=document.getElementById('ktStaffMapOverlay'),status=document.getElementById('ktStaffMapStatus');
+ overlay.hidden=false;
+ document.getElementById('ktStaffMapHeading').textContent='Denah • '+g.guest_name+' • Meja '+table;
+ status.textContent='Memuat denah published untuk wedding aktif...';
+ document.getElementById('ktStaffMapSvg').replaceChildren();ktStaffMapResetView();
+ try{
+  // The same event-scoped published layout used by Guest View; no Admin draft.
+  const loaded=await ktLoadPublishedLayout(true);
+  if(request!==ktStaffMapRequest||overlay.hidden)return;
+  if(eventId!==ktRequireEvent()||eventId!==ktPublicEventId())throw Error('Wedding aktif berubah; buka kembali denah.');
+  if(!loaded)throw Error('Denah published belum dapat dibaca.');
+  const target=published.find(o=>o.kind==='table'&&String(o.id).trim().toLowerCase()===table.toLowerCase());
+  if(!target)throw Error('Meja '+table+' tidak ada di denah published wedding ini.');
+  const svg=document.getElementById('ktStaffMapSvg');
+  draw(svg,published,table,false);
+  paintRoutes(svg,published,publishedPath,table,false);
+  const hasRoute=Array.isArray(target.manualRoute)&&target.manualRoute.length>1 ||
+    eventId===KT_LEGACY_EVENT_ID || published.some(o=>o.ktVenueTemplate==='shanti');
+  status.textContent=hasRoute?'Meja '+table+' disorot • Jalur hijau dari Entrance.':'Meja '+table+' disorot • Jalur belum dipublikasikan untuk meja ini.';
+ }catch(e){if(request===ktStaffMapRequest&&!overlay.hidden)status.textContent='Tidak bisa menampilkan denah: '+e.message;}
+}
+document.getElementById('ktStaffMapClose').onclick=ktStaffMapClose;
+document.getElementById('ktStaffMapZoomIn').onclick=()=>ktStaffMapZoom(1.5);
+document.getElementById('ktStaffMapZoomOut').onclick=()=>ktStaffMapZoom(1/1.5);
+document.getElementById('ktStaffMapReset').onclick=ktStaffMapResetView;
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!document.getElementById('ktStaffMapOverlay').hidden)ktStaffMapClose();});
+</script>
+
+<script>
+// Table Management: experimental UI; only the RPC performs a persistent move.
+let ktMoveCapacityRows=[];
+let ktMoveHistoryRows=[];
+let ktMoveCacheEvent='';
+async function ktMoveLoadData(){
+ const eventId=ktRequireEvent();
+ const [caps,moves]=await Promise.all([
+  sbStaff('kt_table_capacity?select=table_number,base_capacity,extra_chairs&event_id=eq.'+encodeURIComponent(eventId)+'&limit=1000'),
+  sbStaff('kt_table_movements?select=guest_id,from_table,to_table,moved_pax,reason,moved_at&event_id=eq.'+encodeURIComponent(eventId)+'&order=moved_at.desc&limit=1000')
+ ]);
+ if(ktRequireEvent()!==eventId)throw Error('Wedding aktif berubah. Muat ulang.');
+ ktMoveCapacityRows=caps||[];ktMoveHistoryRows=moves||[];ktMoveCacheEvent=eventId;
+}
+function ktMoveTables(){
+ // Only published/draft objects belonging to the selected event; never fall back to another wedding.
+ const data=(ktAdminRole&&Array.isArray(objects)&&ktSelectedEventId===ktMoveCacheEvent)?objects:[];
+ return data.filter(x=>x.kind==='table').map(x=>({id:String(x.id),capacity:Number(x.capacity)||0}));
+}
+async function ktMoveGetTables(){
+ const eventId=ktRequireEvent();
+ // Staff may read the event's published seating plan through the same public
+ // read path as Guest View; draft access remains Admin-only.
+ const url=SB_URL+(eventId===KT_LEGACY_EVENT_ID
+  ?'/rest/v1/kt_published_layout?select=published_layout&id=eq.1'
+  :'/rest/v1/kt_seating_layouts?select=published_layout&event_id=eq.'+encodeURIComponent(eventId));
+ const r=await fetch(url,{headers:{apikey:SB_KEY},cache:'no-store'});
+ if(!r.ok)throw Error('Gagal membaca denah published (HTTP '+r.status+')');
+ const rows=await r.json();
+ if(ktRequireEvent()!==eventId)throw Error('Wedding aktif berubah');
+ let layout=rows?.[0]?.published_layout;
+ if((!Array.isArray(layout)||!layout.length)&&ktAdminRole){
+  const adminRows=await sbStaff(KT_LAYOUT_TABLE+'?select=draft_layout&event_id=eq.'+encodeURIComponent(eventId));
+  if(ktRequireEvent()!==eventId)throw Error('Wedding aktif berubah');
+  layout=adminRows?.[0]?.draft_layout;
+ }
+ if(!Array.isArray(layout)||!layout.length)throw Error('Denah belum dipublish untuk wedding ini');
+ return layout.filter(o=>o&&o.kind==='table'&&o.id!=null).map(o=>({id:String(o.id),capacity:Number(o.capacity)||0}));
+}
+async function ktMoveOpen(id,host){
+ const g=staffGuests.find(x=>String(x.id)===String(id));if(!g)return;
+ const openEventId=ktRequireEvent();
+ const old=host.querySelector('.kt-move-card');if(old){old.remove();return;}
+ const box=document.createElement('div');box.className='kt-move-card';host.append(box);
+ const heading=document.createElement('strong');heading.textContent='Pindah Meja • '+g.guest_name;box.append(heading);
+ const status=document.createElement('div');status.className='kt-move-info';status.textContent='Memuat denah dan kapasitas...';box.append(status);
+ try{
+  await ktMoveLoadData();const tables=await ktMoveGetTables();
+  if(ktRequireEvent()!==openEventId)throw Error('Wedding aktif berubah. Buka kembali.');
+  if(!tables.length)throw Error('Belum ada meja pada denah wedding ini');
+  box.replaceChildren(heading);
+  const from=document.createElement('p');from.className='kt-move-info';from.textContent='Meja asal: '+(g.table_number||'Belum ada')+' • '+g.pax+' pax (seluruh entri pindah bersama)';box.append(from);
+  const label=document.createElement('label');label.textContent='Meja tujuan';box.append(label);
+  const select=document.createElement('select');box.append(select);
+  const available=tables.filter(t=>t.id.trim()!==String(g.table_number||'').trim()).sort((a,b)=>a.id.localeCompare(b.id,'id',{numeric:true,sensitivity:'base'}));
+  const search=document.createElement('input');search.type='search';search.placeholder='Cari nomor meja, contoh 35 atau 55A';search.setAttribute('aria-label','Cari nomor meja tujuan');search.style.margin='8px 0';box.insertBefore(search,select);
+  search.addEventListener('input',()=>{const q=search.value.trim().toLowerCase();let count=0;for(const opt of select.options){const show=opt.value.toLowerCase().includes(q);opt.hidden=!show;opt.disabled=!show;if(show)count++;}const first=Array.from(select.options).find(opt=>!opt.disabled);if(first){select.value=first.value;select.disabled=false;}else{select.selectedIndex=-1;select.disabled=true;}select.dispatchEvent(new Event('change'));});
+  for(const t of available){const opt=document.createElement('option');opt.value=t.id;opt.textContent='Meja '+t.id;select.append(opt);}
+  if(!available.length)throw Error('Tidak ada meja tujuan lain');
+  const addLabel=document.createElement('label');addLabel.textContent='Kursi tambahan (0–10)';box.append(addLabel);
+  const extra=document.createElement('input');extra.type='number';extra.min='0';extra.max='10';extra.step='1';extra.value='0';box.append(extra);
+  const reasonLabel=document.createElement('label');reasonLabel.textContent='Alasan perpindahan (opsional)';box.append(reasonLabel);
+  const reason=document.createElement('input');reason.placeholder='Contoh: permintaan keluarga';box.append(reason);
+  const details=document.createElement('div');details.className='kt-move-info';box.append(details);
+  const update=()=>{
+   const t=tables.find(x=>x.id===select.value);if(!t){details.textContent='Tidak ada meja yang cocok dengan pencarian.';return;}
+   const row=ktMoveCapacityRows.find(x=>x.table_number===t.id);
+   const allocated=staffGuests.filter(x=>String(x.table_number||'').trim()===t.id).reduce((a,x)=>a+(Number(x.pax)||0),0);
+   const base=row?Number(row.base_capacity):t.capacity;
+   const capacity=base+(Number(row?.extra_chairs)||0)+(Number(extra.value)||0);
+   const after=allocated+(Number(g.pax)||0);
+   details.textContent='Alokasi setelah pindah: '+after+' pax • Kapasitas denah: '+t.capacity+' • Kapasitas tercatat: '+capacity+' • Sisa: '+(capacity-after)+' kursi'+(after>capacity?' ⚠ Melebihi kapasitas!':'');
+  };
+  select.onchange=update;extra.oninput=update;update();
+  const history=document.createElement('details');history.style.marginTop='12px';const sum=document.createElement('summary');sum.textContent='Riwayat perpindahan tamu';history.append(sum);
+  const logs=ktMoveHistoryRows.filter(x=>String(x.guest_id)===String(g.id));
+  if(!logs.length){const p=document.createElement('p');p.textContent='Belum ada riwayat.';history.append(p);}
+  for(const log of logs){const p=document.createElement('p');p.className='kt-move-info';p.textContent=(log.from_table||'-')+' → '+log.to_table+' • '+log.moved_pax+' pax • '+new Date(log.moved_at).toLocaleString('id-ID')+(log.reason?' • '+log.reason:'');history.append(p);}
+  box.append(history);
+  const actions=document.createElement('div');actions.className='kt-move-actions';const save=document.createElement('button');save.className='primary';save.textContent='Konfirmasi Pindah Meja';const cancel=document.createElement('button');cancel.textContent='Tutup';cancel.onclick=()=>box.remove();actions.append(save,cancel);box.append(actions);
+  save.onclick=async()=>{
+   const n=Number(extra.value);if(!Number.isInteger(n)||n<0||n>10){alert('Kursi tambahan harus 0–10');return;}
+   if(!select.value||select.disabled){alert('Pilih meja tujuan terlebih dahulu.');return;}
+   if(!confirm('Pindahkan '+g.guest_name+' ('+g.pax+' pax) dari '+(g.table_number||'-')+' ke '+select.value+'?'))return;
+   save.disabled=true;status.textContent='Menyimpan perpindahan...';box.append(status);
+   try{
+    const eventId=ktRequireEvent();
+    if(eventId!==openEventId)throw Error('Wedding aktif berubah. Buka kembali.');
+    const rpc=async confirmed=>{
+     const r=await fetch(SB_URL+'/rest/v1/rpc/kt_move_guest_table',{method:'POST',headers:{apikey:SB_KEY,Authorization:'Bearer '+staffToken,'Content-Type':'application/json'},body:JSON.stringify({p_guest_id:g.id,p_new_table:select.value,p_extra_chairs:n,p_confirm_overcapacity:confirmed,p_reason:reason.value.trim()||null})});
+     if(!r.ok)throw Error('Supabase '+r.status+': '+(await r.text()).slice(0,250));return r.json();
+    };
+    let result=await rpc(false);
+    if(result.status==='needs_confirmation'){
+     if(!confirm('PERINGATAN: '+result.allocated_after+' pax untuk '+result.capacity_after+' kursi. Kelebihan '+result.over_capacity_by+' kursi. Tetap pindahkan?')){status.textContent='Dibatalkan; data tidak berubah.';return;}
+     result=await rpc(true);
+    }
+    if(result.status!=='success')throw Error('Status tidak dikenal dari database');
+    if(ktRequireEvent()!==eventId)throw Error('Wedding aktif berubah, muat ulang');
+    await loadStaffGuests();if(ktAdminRole){adminRenderSummary();adminRenderGuests();}
+    alert('Berhasil: '+(result.from_table||'-')+' → '+result.to_table+' • '+result.moved_pax+' pax.');
+   }catch(e){status.textContent='Gagal: '+e.message;}finally{save.disabled=false;}
+  };
+ }catch(e){status.textContent='Tidak bisa membuka pindah meja: '+e.message;}
+}
+const ktMoveOriginalRender=renderLiveStaff;
+renderLiveStaff=function(){
+ ktMoveOriginalRender();
+ if(!staffToken||(!ktStaffEventReady&&!ktAdminRole))return;
+ const q=document.getElementById('staffquery').value.trim().toLowerCase();
+ const guests=staffGuests.filter(g=>String(g.guest_name||'').toLowerCase().includes(q)||String(g.table_number||'').toLowerCase().includes(q));
+ const cards=[...document.querySelectorAll('#staffrows > .result')];
+ cards.forEach((card,i)=>{const g=guests[i];if(!g)return;const mapButton=document.createElement('button');mapButton.type='button';mapButton.textContent='🗺 Lihat Denah';mapButton.style.marginTop='8px';mapButton.disabled=!g.table_number;mapButton.onclick=()=>ktStaffMapOpen(g.id);card.append(mapButton);const b=document.createElement('button');b.type='button';b.textContent='↔ Pindah Meja';b.style.marginTop='8px';b.onclick=()=>ktMoveOpen(g.id,card);card.append(b);});
+};
+const ktMoveOriginalAdminRender=adminRenderGuests;
+adminRenderGuests=function(){ktMoveOriginalAdminRender();if(!ktAdminRole)return;document.querySelectorAll('#adminGuestRows .admin-row').forEach(row=>{const edit=row.querySelector('button[data-id]');if(!edit)return;const b=document.createElement('button');b.type='button';b.textContent='↔ Pindah Meja';b.style.marginLeft='5px';b.onclick=()=>ktMoveOpen(edit.dataset.id,row);row.append(b);});};
+</script>
